@@ -9,6 +9,7 @@ from scipy.interpolate import interp1d, Rbf, UnivariateSpline, Akima1DInterpolat
 from scipy.signal import savgol_filter
 from scipy.optimize import curve_fit, minimize
 from utils import add_panel_labels
+import pandas as pd
 
 
 xlim_pc12 = [-1.1, 1.1]
@@ -383,6 +384,19 @@ def eval_loc(loc='mmca', transform_pcs=True, ax_profiles=None, ax_pcs=None, ax_p
             ax_prfl[1].plot(dv_dh, wind_data['altitude'][:-1], '-.')
 
 
+def export_profiles_to_csv(altitudes, mean_profiles, rl, loc='mmca'):
+    mean_profiles_200m = np.zeros(mean_profiles.shape)
+    j_200 = np.argmax(altitudes == 200)
+    for i, v in enumerate(mean_profiles):
+        wind_speed_ref = v[j_200]
+        mean_profiles_200m[i] = v / wind_speed_ref
+
+    df = pd.DataFrame(mean_profiles_200m.T[1:, :], columns=[f'Cluster{i}' for i in range(1, len(mean_profiles)+1)])
+    df.insert(0, 'Log', log_law_wind_profile2(altitudes[1:], rl, 1., 200, 0.))
+    df.insert(0, 'Heights', altitudes[1:])
+    csv_file_path = f'cluster_shapes_{loc}.csv'  # Specify the file path where you want to save the CSV file
+    df.to_csv(csv_file_path, index=False)  # Export the DataFrame as CSV, without writing the index
+
 
 def allocate_clusters_mmca(data_pc, pipeline, ax, altitudes, pc_logn, ax_profiles=None):
     rl = .03
@@ -468,6 +482,7 @@ def allocate_clusters_mmca(data_pc, pipeline, ax, altitudes, pc_logn, ax_profile
     ax[0].set_ylabel('Height [m]')
 
     np.save("cluster_shapes_mmca.npy", mean_profiles)
+    export_profiles_to_csv(altitudes, mean_profiles, rl, 'mmca')
 
     return mean_profiles, mean_profiles_pc
 
@@ -560,6 +575,7 @@ def allocate_clusters_mmij(data_pc, pipeline, ax, altitudes, pc_logn, ax_profile
     ax[0].set_ylabel('Height [m]')
 
     np.save("cluster_shapes_mmij.npy", mean_profiles)
+    export_profiles_to_csv(altitudes, mean_profiles, rl, 'mmij')
 
     return mean_profiles, mean_profiles_pc
 

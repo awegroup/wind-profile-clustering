@@ -258,6 +258,20 @@ def plot_3d_results(loc='mmij'):
     add_inside_panel_labels(np.array(ax))
 
 
+def export_distributions_to_csv(altitudes, mean_profiles, rl, loc='mmca'):
+    mean_profiles_200m = np.zeros(mean_profiles.shape)
+    j_200 = np.argmax(altitudes == 200)
+    for i, v in enumerate(mean_profiles):
+        wind_speed_ref = v[j_200]
+        mean_profiles_200m[i] = v / wind_speed_ref
+
+    df = pd.DataFrame(mean_profiles_200m.T[1:, :], columns=[f'Cluster{i}' for i in range(1, len(mean_profiles)+1)])
+    df.insert(0, 'Neutral log', log_law_wind_profile2(altitudes[1:], rl, 1., 200, 0.))
+    df.insert(0, 'Heights', altitudes[1:])
+    csv_file_path = f'cluster_shapes_{loc}.csv'  # Specify the file path where you want to save the CSV file
+    df.to_csv(csv_file_path, index=False)  # Export the DataFrame as CSV, without writing the index
+
+
 def plot_cluster_frequency(loc='mmca', clusters='', year=None, plot=False):
     if loc == 'mmca':
         rl = .03
@@ -274,9 +288,9 @@ def plot_cluster_frequency(loc='mmca', clusters='', year=None, plot=False):
     j_200m = np.argmax(wind_data['altitude'] == 200)
 
     n_bins = 30
-    vw_200m_bin_edges = np.linspace(0, 30, n_bins + 1)
-    vw_200m_bin_centers = (vw_200m_bin_edges[1:] + vw_200m_bin_edges[:-1]) / 2
-    # density_vw200m = np.histogram(wind_speed[:, j_200m], vw_200m_bin_edges, density=True)[0]
+    vw_200m_bin_edges_log = np.linspace(0, 30, n_bins + 1)
+    vw_200m_bin_centers_log = (vw_200m_bin_edges_log[1:] + vw_200m_bin_edges_log[:-1]) / 2
+    # density_vw200m = np.histogram(wind_speed[:, j_200m], vw_200m_bin_edges_log, density=True)[0]
     # np.save('density_vw200m.npy', density_vw200m)
 
     # for j, file_name in enumerate(["x_cluster_weighted_{}.npy".format(loc)]):  #"x_cluster_{}.npy".format(loc),
@@ -289,19 +303,24 @@ def plot_cluster_frequency(loc='mmca', clusters='', year=None, plot=False):
 
     n_clusters = int(np.amax(x_cluster[:, 0]))+1
     cluster_labels = ['Log'] + ['Cluster {}'.format(i) for i in range(1, n_clusters)]
-    
+
+    # vw_200m_bin_edges_export = np.linspace(0, 30, 60 + 1)
+    vw_200m_bin_edges_export = np.arange(0, 30, .6)
+    vw_200m_bin_edges_export = np.round(vw_200m_bin_edges_export, 1)
+    vw_200m_bin_centers_export = (vw_200m_bin_edges_export[1:] + vw_200m_bin_edges_export[:-1]) / 2
+
     if plot:
         plt.figure(figsize=[7, 7])
         plt.subplots_adjust(top=0.92, bottom=0.07, left=0.125, right=0.925, hspace=0.17, wspace=0.13)
         ax0 = plt.subplot(421)
         ax0.set_xlim([0, 27.5])
 
-        n = ax0.hist(wind_speed[:, j_200m], vw_200m_bin_edges, alpha=.2, weights=[100/wind_speed.shape[0]]*wind_speed.shape[0])[0]
-        ax0.plot(vw_200m_bin_centers, n, color='C0', label='Wind atlas')
-        n = ax0.hist(x_cluster[:, 1], vw_200m_bin_edges, alpha=.2, weights=[100/wind_speed.shape[0]]*wind_speed.shape[0])[0]
-        ax0.plot(vw_200m_bin_centers, n, color='C1', label='Aggregate of clusters')
-        n = ax0.hist(x_cluster_log[:, 1], vw_200m_bin_edges, alpha=.2, weights=[100/wind_speed.shape[0]]*wind_speed.shape[0])[0]
-        ax0.plot(vw_200m_bin_centers, n, color='C2', label='Log fit')
+        n = ax0.hist(wind_speed[:, j_200m], vw_200m_bin_edges_log, alpha=.2, weights=[100/wind_speed.shape[0]]*wind_speed.shape[0])[0]
+        ax0.plot(vw_200m_bin_centers_log, n, color='C0', label='Wind atlas')
+        n = ax0.hist(x_cluster[:, 1], vw_200m_bin_edges_log, alpha=.2, weights=[100/wind_speed.shape[0]]*wind_speed.shape[0])[0]
+        ax0.plot(vw_200m_bin_centers_log, n, color='C1', label='Aggregate of clusters')
+        n = ax0.hist(x_cluster_log[:, 1], vw_200m_bin_edges_log, alpha=.2, weights=[100/wind_speed.shape[0]]*wind_speed.shape[0])[0]
+        ax0.plot(vw_200m_bin_centers_log, n, color='C2', label='Log fit')
         
         ax0.set_ylabel('Bin frequency [%]')
         # ax0.legend()
@@ -313,19 +332,26 @@ def plot_cluster_frequency(loc='mmca', clusters='', year=None, plot=False):
         frequency = []
         frequency_effective = []
     p_avg = 0
+
+    bin_freq_export = np.zeros((vw_200m_bin_edges_export.shape[0]-1, n_clusters))
     for i in range(n_clusters):
+        # Load optimized power curves and set the wind speed distribution limits accordingly
         df = pd.read_csv('opt_res_{}/opt_res_{}{}.csv'.format(loc, loc, i+1))
         vw_200m_bin_edges = np.linspace(df['vw200'].iloc[0], df['vw200'].iloc[-1], n_bins+1)
         vw_200m_bin_centers = (vw_200m_bin_edges[1:] + vw_200m_bin_edges[:-1])/2
         mask = x_cluster[:, 0] == i
         bin_freq = np.histogram(x_cluster[mask, 1], vw_200m_bin_edges)[0]
-        
+
+        # the weights argument makes sure that each bin quantifies the frequency of the total population
+        bin_freq_export[:, i] = np.histogram(x_cluster[mask, 1], vw_200m_bin_edges_export)[0]*100/wind_speed.shape[0]
+
         if plot:
             ax = plt.subplot(4, 2, i + 2)
             ax.xaxis.set_visible(False)
             ax.set_ylim([0, 2])
             ax.set_xlim([0, 27.5])
 
+            # in-between cut-in and cut-out
             ax.hist(x_cluster[mask, 1], vw_200m_bin_edges, alpha=.5, weights=[100/wind_speed.shape[0]]*np.sum(mask))
             ax.axvline(df['vw200'].iloc[0], ls='--', color='grey')
             ax.axvline(df['vw200'].iloc[-1], ls='--', color='grey')
@@ -360,6 +386,14 @@ def plot_cluster_frequency(loc='mmca', clusters='', year=None, plot=False):
         p_avg_bin = np.sum(bin_freq * bin_power / n_samples)
         p_avg += p_avg_bin
     print("Average power {:.2f}".format(p_avg*1e-3))
+
+    df = pd.DataFrame(bin_freq_export, columns=cluster_labels)
+    df.insert(0, 'Lower', vw_200m_bin_edges_export[:-1])
+    df.insert(1, 'Upper', vw_200m_bin_edges_export[1:])
+    df.columns = ['Lower', 'Upper', 'Log', 'Cluster1', 'Cluster2', 'Cluster3', 'Cluster4', 'Cluster5', 'Cluster6']
+
+    csv_file_path = f'cluster_frequency_{loc}.csv'  # Specify the file path where you want to save the CSV file
+    df.to_csv(csv_file_path, index=False)
 
     if plot:
         ax_power_curve[0].get_shared_y_axes().join(*ax_power_curve)
@@ -500,9 +534,9 @@ def assign_to_cluster_for_all_combinations():
 
 if __name__ == '__main__':
     # assign_to_cluster_for_all_combinations()
-    plot_aep()
-    # loc = 'mmij'
-    # plot_cluster_frequency(loc, plot=True)
+    # plot_aep()
+    loc = 'mmij'
+    plot_cluster_frequency(loc, plot=False)
     # plot_cluster_frequency(loc, '0')
     # plot_cluster_frequency(loc, '012')
 
