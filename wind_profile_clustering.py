@@ -325,17 +325,15 @@ def predict_cluster(training_data, n_clusters, predict_fun, cluster_mapping):
 def export_profiles_to_csv(altitudes, prl, prp, loc='mmca'):
     import pandas as pd
 
-    scale_factors = []
+    normalised_wind_speeds_200m = []
     for i, (u, v) in enumerate(zip(prl, prp)):
         w = (u ** 2 + v ** 2) ** .5
 
-        w_ref = np.interp(100., altitudes, w)
-        scale_factor = 1 / w_ref
+        w_norm_200m = np.interp(200., altitudes, w)
+        prl[i, :] = prl[i, :]/w_norm_200m
+        prp[i, :] = prp[i, :]/w_norm_200m
 
-        prl[i, :] = prl[i, :] * scale_factor
-        prp[i, :] = prp[i, :] * scale_factor
-
-        scale_factors.append(scale_factor)
+        normalised_wind_speeds_200m.append(w_norm_200m)
 
     df_prl = pd.DataFrame(prl.T, columns=[f'Cluster{i}-parallel' for i in range(1, len(prl)+1)])
     df_prp = pd.DataFrame(prp.T, columns=[f'Cluster{i}-perpendicular' for i in range(1, len(prp)+1)])
@@ -344,7 +342,7 @@ def export_profiles_to_csv(altitudes, prl, prp, loc='mmca'):
     csv_file_path = f'cluster_shapes_ch4_{loc}.csv'  # Specify the file path where you want to save the CSV file
     df.to_csv(csv_file_path, index=False)  # Export the DataFrame as CSV, without writing the index
 
-    return scale_factors
+    return normalised_wind_speeds_200m
 
 
 def read_data_and_cluster(loc, n_clusters):
@@ -386,38 +384,23 @@ def plot_cluster_results(loc='mmca', n_clusters=8):
 
 
 def reconstruct_freq_distr_paper():
-    import pickle
     loc = 'mmca'
     n_clusters = 8
-    prl, prp, frequency_clusters, _, _, processed_data_full, labels = read_data_and_cluster(loc, n_clusters)
-    scale_factors = export_profiles_to_csv(processed_data_full['altitude'], prl, prp, loc)
+    prl, prp, frequency_clusters, _, _, processed_data_full, labels_full = read_data_and_cluster(loc, n_clusters)
+    normalised_wind_speeds_200m = export_profiles_to_csv(processed_data_full['altitude'], prl, prp, loc)
     ref_wind_speeds = processed_data_full['normalisation_value']
 
-    fig, ax1 = plt.subplots(8, 1, sharex=True, sharey=True)
-    fig, ax2 = plt.subplots(1, 1, sharex=True, sharey=True)
-    # Old implementation - based on cut-in and cut-out speeds
-    with open('/home/mark/Projects/quasi-steady-model-sandbox/wind_resource/cut_in_out_8mmc.pickle', 'rb') as f:
-        cut_in_out = pickle.load(f)
-    n_wind_speed_bins = 25
+    fig, ax = plt.subplots(8, 1, sharex=True, sharey=True)
+
     for i_c in range(n_clusters):
-        v = np.linspace(cut_in_out[i_c+1]['v_cut_in_100m'], cut_in_out[i_c+1]['v_cut_out_100m'], n_wind_speed_bins+1)
-        mask = labels == i_c
-        sf = scale_factors[i_c]
-        #TODO: divide by sf
-        h, b = np.histogram(ref_wind_speeds[mask] * sf, v)
-        ax1[i_c].step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
-        ax2.step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
+        mask = labels_full == i_c
+        w_norm_200m = normalised_wind_speeds_200m[i_c]
 
-        h, b = np.histogram(ref_wind_speeds[mask] * sf, 50)
-        ax1[i_c].step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
+        h, b = np.histogram(ref_wind_speeds[mask] * w_norm_200m, 50)
+        ax[i_c].step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
 
-    # plt.xlim([6, 18])
-    # plt.ylim([0, .0125])
-
-    # for i_c in range(n_clusters):
-    #     mask = labels == i_c
-    #     h, b = np.histogram(processed_data_full['wind_speed'][mask, 5], 20)
-    #     ax[i_c].step((b[:-1]+b[1:])/2, h, where='mid')
+        h, b = np.histogram(processed_data_full['wind_speed'][mask, 11], 50)
+        ax[i_c].step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
 
 
 if __name__ == '__main__':
