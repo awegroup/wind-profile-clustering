@@ -30,13 +30,13 @@ def cluster_normalized_wind_profiles_pca(training_data, n_clusters, n_pcs=5, reo
         freq[l] += 100. / n_samples
 
     # By default order the clusters on their size.
-    plot_order = np.array(sorted(range(n_clusters), key=freq.__getitem__, reverse=True))
-    if reorder:
-        plot_order = plot_order[reorder]
-    clusters_pc = cluster_model.cluster_centers_[plot_order, :]
-    freq = freq[plot_order]
+    cluster_order = np.array(sorted(range(n_clusters), key=freq.__getitem__, reverse=True))
+    if reorder is not None:
+        cluster_order = cluster_order[reorder]
+    clusters_pc = cluster_model.cluster_centers_[cluster_order, :]
+    freq = freq[cluster_order]
     labels = np.zeros(n_samples).astype(int)
-    for i_new, i_old in enumerate(plot_order):
+    for i_new, i_old in enumerate(cluster_order):
         labels[cluster_model.labels_ == i_old] = i_new
 
     # Retrieve the mean cluster shapes in original coordinate system.
@@ -55,7 +55,7 @@ def cluster_normalized_wind_profiles_pca(training_data, n_clusters, n_pcs=5, reo
         'data_processing_pipeline': make_pipeline(pca, cluster_model),
         'pca': pca,
         'training_data_pc': training_data_pc,
-        'cluster_mapping': plot_order,
+        'cluster_mapping': cluster_order,
         'pc_explained_variance': pca.explained_variance_,
     }
     return res
@@ -322,29 +322,104 @@ def predict_cluster(training_data, n_clusters, predict_fun, cluster_mapping):
     return labels, frequency_clusters
 
 
-if __name__ == '__main__':
+def export_profiles_to_csv(altitudes, prl, prp, loc='mmca'):
+    import pandas as pd
+
+    scale_factors = []
+    for i, (u, v) in enumerate(zip(prl, prp)):
+        w = (u ** 2 + v ** 2) ** .5
+
+        w_ref = np.interp(100., altitudes, w)
+        scale_factor = 1 / w_ref
+
+        prl[i, :] = prl[i, :] * scale_factor
+        prp[i, :] = prp[i, :] * scale_factor
+
+        scale_factors.append(scale_factor)
+
+    df_prl = pd.DataFrame(prl.T, columns=[f'Cluster{i}-parallel' for i in range(1, len(prl)+1)])
+    df_prp = pd.DataFrame(prp.T, columns=[f'Cluster{i}-perpendicular' for i in range(1, len(prp)+1)])
+    df = pd.concat([df_prl, df_prp], axis=1)
+    df.insert(0, 'Heights', altitudes)
+    csv_file_path = f'cluster_shapes_ch4_{loc}.csv'  # Specify the file path where you want to save the CSV file
+    df.to_csv(csv_file_path, index=False)  # Export the DataFrame as CSV, without writing the index
+
+    return scale_factors
+
+
+def read_data_and_cluster(loc, n_clusters):
     # from read_data.fgw_lidar import read_data
     # data = read_data()
     from read_data.dowa import read_data
-    data = read_data({'name': 'mmij'})
     from preprocess_data import preprocess_data
+    reorder = {
+        'mmca': [1, 4, 0, 2, 3, 5, 6, 7],
+        'mmij': [0, 2, 3, 1, 4, 5, 6, 7],
+    }
+
+    data = read_data({'name': loc})
     processed_data = preprocess_data(data)
-    n_clusters = 8
-    res = cluster_normalized_wind_profiles_pca(processed_data['training_data'], n_clusters)
+    res = cluster_normalized_wind_profiles_pca(processed_data['training_data'], n_clusters, reorder=reorder[loc])
     prl, prp = res['clusters_feature']['parallel'], res['clusters_feature']['perpendicular']
-    plot_wind_profile_shapes(processed_data['altitude'], prl, prp, (prl ** 2 + prp ** 2) ** .5)
-    visualise_patterns(n_clusters, processed_data, res['sample_labels'], res['frequency_clusters'])
-    projection_plot_of_clusters(res['training_data_pc'], res['sample_labels'], res['clusters_pc'])
 
     processed_data_full = preprocess_data(data, remove_low_wind_samples=False)
-    labels, frequency_clusters = predict_cluster(processed_data_full['training_data'], n_clusters,
+    labels_full, frequency_clusters = predict_cluster(processed_data_full['training_data'], n_clusters,
                                                  res['data_processing_pipeline'].predict, res['cluster_mapping'])
+    return prl, prp, frequency_clusters, processed_data, res, processed_data_full, labels_full
+
+
+def plot_cluster_results(loc='mmca', n_clusters=8):
+    prl, prp, frequency_clusters, processed_data, clustering_res, processed_data_full, labels = read_data_and_cluster(loc, n_clusters)
+
+    plot_wind_profile_shapes(processed_data['altitude'], prl, prp, (prl ** 2 + prp ** 2) ** .5)
+    visualise_patterns(n_clusters, processed_data, clustering_res['sample_labels'], clustering_res['frequency_clusters'])
+    projection_plot_of_clusters(clustering_res['training_data_pc'], clustering_res['sample_labels'], clustering_res['clusters_pc'])
+
     fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
     plt.subplots_adjust(top=.9, hspace=.3)
     ax[0].set_title('Filtered dataset')
-    plot_bars(res['frequency_clusters'].reshape((1, -1)), ax=ax[0], xticklabels=range(1, n_clusters+1))
+    plot_bars(clustering_res['frequency_clusters'].reshape((1, -1)), ax=ax[0], xticklabels=range(1, n_clusters+1))
     ax[1].set_title('Full dataset')
     plot_bars(frequency_clusters.reshape((1, -1)), ax=ax[1], xticklabels=range(1, n_clusters+1))
     for a in ax: a.set_ylabel('Cluster frequency [%]')
     # visualise_patterns(n_clusters, processed_data_full, labels)
+
+
+def reconstruct_freq_distr_paper():
+    import pickle
+    loc = 'mmca'
+    n_clusters = 8
+    prl, prp, frequency_clusters, _, _, processed_data_full, labels = read_data_and_cluster(loc, n_clusters)
+    scale_factors = export_profiles_to_csv(processed_data_full['altitude'], prl, prp, loc)
+    ref_wind_speeds = processed_data_full['normalisation_value']
+
+    fig, ax1 = plt.subplots(8, 1, sharex=True, sharey=True)
+    fig, ax2 = plt.subplots(1, 1, sharex=True, sharey=True)
+    # Old implementation - based on cut-in and cut-out speeds
+    with open('/home/mark/Projects/quasi-steady-model-sandbox/wind_resource/cut_in_out_8mmc.pickle', 'rb') as f:
+        cut_in_out = pickle.load(f)
+    n_wind_speed_bins = 25
+    for i_c in range(n_clusters):
+        v = np.linspace(cut_in_out[i_c+1]['v_cut_in_100m'], cut_in_out[i_c+1]['v_cut_out_100m'], n_wind_speed_bins+1)
+        mask = labels == i_c
+        sf = scale_factors[i_c]
+        #TODO: divide by sf
+        h, b = np.histogram(ref_wind_speeds[mask] * sf, v)
+        ax1[i_c].step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
+        ax2.step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
+
+        h, b = np.histogram(ref_wind_speeds[mask] * sf, 50)
+        ax1[i_c].step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
+
+    # plt.xlim([6, 18])
+    # plt.ylim([0, .0125])
+
+    # for i_c in range(n_clusters):
+    #     mask = labels == i_c
+    #     h, b = np.histogram(processed_data_full['wind_speed'][mask, 5], 20)
+    #     ax[i_c].step((b[:-1]+b[1:])/2, h, where='mid')
+
+
+if __name__ == '__main__':
+    reconstruct_freq_distr_paper()
     plt.show()
