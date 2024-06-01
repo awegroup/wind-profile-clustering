@@ -398,6 +398,7 @@ def export_profiles_to_csv(altitudes, mean_profiles, rl, loc='mmca'):
 
 
 def generate_freq_distribution():
+    import pandas as pd
     loc = 'mmca'
     n_clusters = 8
     prl, prp, frequency_clusters, _, _, processed_data_full, labels_full = read_data_and_cluster(loc, n_clusters)
@@ -415,6 +416,14 @@ def generate_freq_distribution():
 
         h, b = np.histogram(processed_data_full['wind_speed'][mask, 11], 50)
         ax[i_c].step((b[:-1]+b[1:])/2, h / processed_data_full['n_samples'], where='mid')
+
+    df = pd.DataFrame(bin_freq_export, columns=cluster_labels)
+    df.insert(0, 'Lower', vw_200m_bin_edges_export[:-1])
+    df.insert(1, 'Upper', vw_200m_bin_edges_export[1:])
+    df.columns = ['Lower', 'Upper', 'Log', 'Cluster1', 'Cluster2', 'Cluster3', 'Cluster4', 'Cluster5', 'Cluster6']
+
+    csv_file_path = f'cluster_frequency_{loc}.csv'  # Specify the file path where you want to save the CSV file
+    df.to_csv(csv_file_path, index=False)
 
 
 if __name__ == '__main__':
