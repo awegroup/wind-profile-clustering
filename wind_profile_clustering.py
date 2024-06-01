@@ -399,7 +399,7 @@ def plot_cluster_results(loc='mmca', n_clusters=8):
 
 def generate_freq_distribution():
     import pandas as pd
-    loc = 'mmca'
+    loc = 'mmij'
     n_clusters = 8
     prl, prp, frequency_clusters, _, _, processed_data_full, labels_full = read_data_and_cluster(loc, n_clusters)
     normalised_wind_speeds_200m = export_profiles_to_csv(processed_data_full['altitude'], prl, prp, loc)
@@ -407,21 +407,23 @@ def generate_freq_distribution():
     ref_wind_speeds = processed_data_full['normalisation_value']
 
     vw_200m_bin_edges_export = np.arange(0, 35, .6)
+    vw_200m_bin_edges_export = np.round(vw_200m_bin_edges_export, 1)
 
     fig, ax = plt.subplots(8, 1, sharex=True, sharey=True)
 
+    bin_freq_export = np.zeros((vw_200m_bin_edges_export.shape[0] - 1, n_clusters))
     for i_c in range(n_clusters):
         mask = labels_full == i_c
         w_norm_200m = normalised_wind_speeds_200m[i_c]
 
         h_norm_wind_speeds, b = np.histogram(ref_wind_speeds[mask] * w_norm_200m, vw_200m_bin_edges_export)
         ax[i_c].step((b[:-1]+b[1:])/2, h_norm_wind_speeds / processed_data_full['n_samples'], where='mid')
+        bin_freq_export[:, i_c] = h_norm_wind_speeds
 
         h_200m_wind_speeds, b = np.histogram(processed_data_full['wind_speed'][mask, 11], vw_200m_bin_edges_export)
         ax[i_c].step((b[:-1]+b[1:])/2, h_200m_wind_speeds / processed_data_full['n_samples'], where='mid')
 
-    print(h_norm_wind_speeds.shape)
-    df = pd.DataFrame(h_norm_wind_speeds * 100/processed_data_full['n_samples'])
+    df = pd.DataFrame(bin_freq_export * 100/processed_data_full['n_samples'])
     df.insert(0, 'Lower', vw_200m_bin_edges_export[:-1])
     df.insert(1, 'Upper', vw_200m_bin_edges_export[1:])
     df.columns = ['Lower', 'Upper', 'Cluster1', 'Cluster2', 'Cluster3', 'Cluster4', 'Cluster5', 'Cluster6', 'Cluster7', 'Cluster8']
