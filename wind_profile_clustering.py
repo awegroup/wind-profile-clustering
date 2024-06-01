@@ -383,7 +383,21 @@ def plot_cluster_results(loc='mmca', n_clusters=8):
     # visualise_patterns(n_clusters, processed_data_full, labels)
 
 
-def reconstruct_freq_distr_paper():
+def export_profiles_to_csv(altitudes, mean_profiles, rl, loc='mmca'):
+    import pandas as pd
+    mean_profiles_200m = np.zeros(mean_profiles.shape)
+    j_200 = np.argmax(altitudes == 200)
+    for i, v in enumerate(mean_profiles):
+        wind_speed_ref = v[j_200]
+        mean_profiles_200m[i] = v / wind_speed_ref
+
+    df = pd.DataFrame(mean_profiles_200m.T[1:, :], columns=[f'Cluster{i}' for i in range(1, len(mean_profiles)+1)])
+    df.insert(0, 'Heights', altitudes[1:])
+    csv_file_path = f'cluster_shapes_{loc}.csv'  # Specify the file path where you want to save the CSV file
+    df.to_csv(csv_file_path, index=False)  # Export the DataFrame as CSV, without writing the index
+
+
+def generate_freq_distribution():
     loc = 'mmca'
     n_clusters = 8
     prl, prp, frequency_clusters, _, _, processed_data_full, labels_full = read_data_and_cluster(loc, n_clusters)
@@ -404,5 +418,5 @@ def reconstruct_freq_distr_paper():
 
 
 if __name__ == '__main__':
-    reconstruct_freq_distr_paper()
+    generate_freq_distribution()
     plt.show()
