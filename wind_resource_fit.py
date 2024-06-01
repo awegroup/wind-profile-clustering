@@ -291,7 +291,7 @@ def plot_cluster_frequency(loc='mmca', clusters='', year=None, plot=False):
     cluster_labels = ['Log'] + ['Cluster {}'.format(i) for i in range(1, n_clusters)]
 
     # vw_200m_bin_edges_export = np.linspace(0, 30, 60 + 1)
-    vw_200m_bin_edges_export = np.arange(0, 30, .6)
+    vw_200m_bin_edges_export = np.arange(0, 35, .6)
     vw_200m_bin_edges_export = np.round(vw_200m_bin_edges_export, 1)
     vw_200m_bin_centers_export = (vw_200m_bin_edges_export[1:] + vw_200m_bin_edges_export[:-1]) / 2
 
