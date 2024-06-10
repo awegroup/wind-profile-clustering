@@ -291,7 +291,7 @@ def plot_cluster_frequency(loc='mmca', clusters='', year=None, plot=False):
     cluster_labels = ['Log'] + ['Cluster {}'.format(i) for i in range(1, n_clusters)]
 
     # vw_200m_bin_edges_export = np.linspace(0, 30, 60 + 1)
-    vw_200m_bin_edges_export = np.arange(0, 35, .6)
+    vw_200m_bin_edges_export = np.arange(0, 35, .5)
     vw_200m_bin_edges_export = np.round(vw_200m_bin_edges_export, 1)
     vw_200m_bin_centers_export = (vw_200m_bin_edges_export[1:] + vw_200m_bin_edges_export[:-1]) / 2
 
@@ -378,7 +378,7 @@ def plot_cluster_frequency(loc='mmca', clusters='', year=None, plot=False):
     df.insert(1, 'Upper', vw_200m_bin_edges_export[1:])
     df.columns = ['Lower', 'Upper', 'Log', 'Cluster1', 'Cluster2', 'Cluster3', 'Cluster4', 'Cluster5', 'Cluster6']
 
-    csv_file_path = f'cluster_frequency_{loc}.csv'  # Specify the file path where you want to save the CSV file
+    csv_file_path = f'cluster_frequency_ch8_{loc}.csv'  # Specify the file path where you want to save the CSV file
     df.to_csv(csv_file_path, index=False)
 
     if plot:
@@ -521,7 +521,7 @@ def assign_to_cluster_for_all_combinations():
 if __name__ == '__main__':
     # assign_to_cluster_for_all_combinations()
     # plot_aep()
-    loc = 'mmij'
+    loc = 'mmca'
     plot_cluster_frequency(loc, plot=False)
     # plot_cluster_frequency(loc, '0')
     # plot_cluster_frequency(loc, '012')

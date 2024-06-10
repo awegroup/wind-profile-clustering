@@ -394,7 +394,7 @@ def export_profiles_to_csv(altitudes, mean_profiles, rl, loc='mmca'):
     df = pd.DataFrame(mean_profiles_200m.T[1:, :], columns=[f'Cluster{i}' for i in range(1, len(mean_profiles)+1)])
     df.insert(0, 'Log', log_law_wind_profile2(altitudes[1:], rl, 1., 200, 0.))
     df.insert(0, 'Heights', altitudes[1:])
-    csv_file_path = f'cluster_shapes_{loc}.csv'  # Specify the file path where you want to save the CSV file
+    csv_file_path = f'cluster_shapes_ch8_{loc}.csv'  # Specify the file path where you want to save the CSV file
     df.to_csv(csv_file_path, index=False)  # Export the DataFrame as CSV, without writing the index
 
 
