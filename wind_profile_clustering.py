@@ -325,24 +325,28 @@ def predict_cluster(training_data, n_clusters, predict_fun, cluster_mapping):
 def export_profiles_to_csv(altitudes, prl, prp, loc='mmca'):
     import pandas as pd
 
-    normalised_wind_speeds_200m = []
+    normalised_wind_speeds_100m = []
     for i, (u, v) in enumerate(zip(prl, prp)):
         w = (u ** 2 + v ** 2) ** .5
 
-        w_norm_200m = np.interp(200., altitudes, w)
-        prl[i, :] = prl[i, :]/w_norm_200m
-        prp[i, :] = prp[i, :]/w_norm_200m
+        w_norm_100m = np.interp(100., altitudes, w)
+        prl[i, :] = prl[i, :]/w_norm_100m
+        prp[i, :] = prp[i, :]/w_norm_100m
 
-        normalised_wind_speeds_200m.append(w_norm_200m)
+        normalised_wind_speeds_100m.append(w_norm_100m)
 
-    df_prl = pd.DataFrame(prl.T, columns=[f'Cluster{i}-parallel' for i in range(1, len(prl)+1)])
-    df_prp = pd.DataFrame(prp.T, columns=[f'Cluster{i}-perpendicular' for i in range(1, len(prp)+1)])
+    cols_prl = [f'Cluster{i}-parallel' for i in range(1, len(prl)+1)]
+    df_prl = pd.DataFrame(prl.T, columns=cols_prl)
+    cols_prp = [f'Cluster{i}-perpendicular' for i in range(1, len(prp)+1)]
+    df_prp = pd.DataFrame(prp.T, columns=cols_prp)
     df = pd.concat([df_prl, df_prp], axis=1)
+    cols = [item for pair in zip(cols_prl, cols_prp) for item in pair]
+    df = df[cols]
     df.insert(0, 'Heights', altitudes)
     csv_file_path = f'cluster_shapes_ch4_{loc}.csv'  # Specify the file path where you want to save the CSV file
     df.to_csv(csv_file_path, index=False)  # Export the DataFrame as CSV, without writing the index
 
-    return normalised_wind_speeds_200m
+    return normalised_wind_speeds_100m
 
 
 def read_data_and_cluster(loc, n_clusters):
@@ -402,30 +406,32 @@ def generate_freq_distribution():
     loc = 'mmij'
     n_clusters = 8
     prl, prp, frequency_clusters, _, _, processed_data_full, labels_full = read_data_and_cluster(loc, n_clusters)
-    normalised_wind_speeds_200m = export_profiles_to_csv(processed_data_full['altitude'], prl, prp, loc)
-    print(normalised_wind_speeds_200m)
+    normalised_wind_speeds_100m = export_profiles_to_csv(processed_data_full['altitude'], prl, prp, loc)
+    print(normalised_wind_speeds_100m)
+    i_alt = 5
+    print(processed_data_full['altitude'][i_alt])
     ref_wind_speeds = processed_data_full['normalisation_value']
 
-    vw_200m_bin_edges_export = np.arange(0, 35, .6)
-    vw_200m_bin_edges_export = np.round(vw_200m_bin_edges_export, 1)
+    vw_100m_bin_edges_export = np.arange(0, 35, .5)
+    vw_100m_bin_edges_export = np.round(vw_100m_bin_edges_export, 1)
 
     fig, ax = plt.subplots(8, 1, sharex=True, sharey=True)
 
-    bin_freq_export = np.zeros((vw_200m_bin_edges_export.shape[0] - 1, n_clusters))
+    bin_freq_export = np.zeros((vw_100m_bin_edges_export.shape[0] - 1, n_clusters))
     for i_c in range(n_clusters):
         mask = labels_full == i_c
-        w_norm_200m = normalised_wind_speeds_200m[i_c]
+        w_norm_100m = normalised_wind_speeds_100m[i_c]
 
-        h_norm_wind_speeds, b = np.histogram(ref_wind_speeds[mask] * w_norm_200m, vw_200m_bin_edges_export)
+        h_norm_wind_speeds, b = np.histogram(ref_wind_speeds[mask] * w_norm_100m, vw_100m_bin_edges_export)
         ax[i_c].step((b[:-1]+b[1:])/2, h_norm_wind_speeds / processed_data_full['n_samples'], where='mid')
         bin_freq_export[:, i_c] = h_norm_wind_speeds
 
-        h_200m_wind_speeds, b = np.histogram(processed_data_full['wind_speed'][mask, 11], vw_200m_bin_edges_export)
-        ax[i_c].step((b[:-1]+b[1:])/2, h_200m_wind_speeds / processed_data_full['n_samples'], where='mid')
+        h_100m_wind_speeds, b = np.histogram(processed_data_full['wind_speed'][mask, i_alt], vw_100m_bin_edges_export)
+        ax[i_c].step((b[:-1]+b[1:])/2, h_100m_wind_speeds / processed_data_full['n_samples'], where='mid')
 
     df = pd.DataFrame(bin_freq_export * 100/processed_data_full['n_samples'])
-    df.insert(0, 'Lower', vw_200m_bin_edges_export[:-1])
-    df.insert(1, 'Upper', vw_200m_bin_edges_export[1:])
+    df.insert(0, 'Lower', vw_100m_bin_edges_export[:-1])
+    df.insert(1, 'Upper', vw_100m_bin_edges_export[1:])
     df.columns = ['Lower', 'Upper', 'Cluster1', 'Cluster2', 'Cluster3', 'Cluster4', 'Cluster5', 'Cluster6', 'Cluster7', 'Cluster8']
 
     csv_file_path = f'cluster_frequency_ch4_{loc}.csv'  # Specify the file path where you want to save the CSV file
