@@ -1,5 +1,4 @@
-"""
-ERA5 Data Reader for Wind Profile Clustering
+"""ERA5 Data Reader for Wind Profile Clustering.
 
 This module reads ERA5 reanalysis wind data from NetCDF files and converts it
 to the format expected by the wind profile clustering pipeline.
@@ -27,9 +26,6 @@ R_D = 287.058  # Specific gas constant for dry air [J/(kg·K)]
 # When True, always use Method 3 (approximate altitudes)
 # When False, automatically determine the best method based on available data
 FORCE_APPROXIMATE_ALTITUDES = True
-
-# Default data directory relative to this script
-DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data/ERA5"
 
 # ERA5 L137 Model Level Definitions
 # Source: ECMWF https://confluence.ecmwf.int/display/UDOC/L137+model+level+definitions 
@@ -175,223 +171,235 @@ L137_COEFFICIENTS = [
     (137, 0.000000, 1.000000),
 ]
 
-def method1_geopotential_altitudes(ds_selected, levels, target_altitudes):
-    """
-    Method 1: Calculate altitudes from geopotential data and interpolate at each timestep.
+def method1_geopotential_altitudes(dsSelected, levels, targetAltitudes):
+    """Calculate altitudes from geopotential data and interpolate at each timestep.
     
-    :param ds_selected: Location-selected xarray Dataset
-    :param levels: Model level numbers
-    :param target_altitudes: Target altitude levels for interpolation [m]
-    :return: Interpolated wind data at target altitudes
-    :rtype: tuple (wind_east, wind_north, altitudes)
+    Method 1: Uses geopotential field data directly from ERA5.
+    
+    Args:
+        dsSelected (xarray.Dataset): Location-selected xarray Dataset.
+        levels (array): Model level numbers.
+        targetAltitudes (array): Target altitude levels for interpolation [m].
+
+    Returns:
+        tuple: (windEast, windNorth, altitudes) interpolated to target altitudes.
     """
     print("Using Method 1: Geopotential-based altitude calculation")
     
     # Get geopotential and wind data
-    z_data = ds_selected['geopotential'] if 'geopotential' in ds_selected else ds_selected['z']
-    u_data = ds_selected['u_component_of_wind'] if 'u_component_of_wind' in ds_selected else ds_selected['u']
-    v_data = ds_selected['v_component_of_wind'] if 'v_component_of_wind' in ds_selected else ds_selected['v']
+    zData = dsSelected['geopotential'] if 'geopotential' in dsSelected else dsSelected['z']
+    uData = dsSelected['u_component_of_wind'] if 'u_component_of_wind' in dsSelected else dsSelected['u']
+    vData = dsSelected['v_component_of_wind'] if 'v_component_of_wind' in dsSelected else dsSelected['v']
     
     # Calculate altitudes at each timestep
-    altitudes_time_varying = z_data.values / STANDARD_GRAVITY  # (time, level)
+    altitudesTimeVarying = zData.values / STANDARD_GRAVITY  # (time, level)
     
     # Interpolate wind data to target altitudes at each timestep
-    wind_east_interp = interpolate_profiles(u_data.values, altitudes_time_varying, target_altitudes)
-    wind_north_interp = interpolate_profiles(v_data.values, altitudes_time_varying, target_altitudes)
+    windEastInterp = interpolate_profiles(uData.values, altitudesTimeVarying, targetAltitudes)
+    windNorthInterp = interpolate_profiles(vData.values, altitudesTimeVarying, targetAltitudes)
     
-    return wind_east_interp, wind_north_interp, target_altitudes
+    return windEastInterp, windNorthInterp, targetAltitudes
 
 
-def method2_temperature_humidity_altitudes(ds_selected, levels, target_altitudes, sfc_file_path, location):
-    """
-    Method 2: Calculate altitudes from temperature/humidity data and interpolate at each timestep.
+def method2_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, sfcFilePath, location):
+    """Calculate altitudes from temperature/humidity data using hydrostatic equation.
     
-    :param ds_selected: Location-selected xarray Dataset  
-    :param levels: Model level numbers
-    :param target_altitudes: Target altitude levels for interpolation [m]
-    :param sfc_file_path: Path to surface data file
-    :param location: Location dictionary with lat/lon
-    :return: Interpolated wind data at target altitudes
-    :rtype: tuple (wind_east, wind_north, altitudes)
+    Method 2: Uses temperature, humidity, and surface pressure data.
+    
+    Args:
+        dsSelected (xarray.Dataset): Location-selected xarray Dataset.
+        levels (array): Model level numbers.
+        targetAltitudes (array): Target altitude levels for interpolation [m].
+        sfcFilePath (str or Path): Path to surface data file.
+        location (dict): Location dictionary with 'latitude' and 'longitude' keys.
+
+    Returns:
+        tuple: (windEast, windNorth, altitudes) interpolated to target altitudes.
     """
     print("Using Method 2: Temperature/humidity-based altitude calculation")
     
     # Get required data
-    t_data = ds_selected['temperature'] if 'temperature' in ds_selected else ds_selected['t']
-    q_data = ds_selected['specific_humidity'] if 'specific_humidity' in ds_selected else ds_selected['q']
-    u_data = ds_selected['u_component_of_wind'] if 'u_component_of_wind' in ds_selected else ds_selected['u']
-    v_data = ds_selected['v_component_of_wind'] if 'v_component_of_wind' in ds_selected else ds_selected['v']
+    tData = dsSelected['temperature'] if 'temperature' in dsSelected else dsSelected['t']
+    qData = dsSelected['specific_humidity'] if 'specific_humidity' in dsSelected else dsSelected['q']
+    uData = dsSelected['u_component_of_wind'] if 'u_component_of_wind' in dsSelected else dsSelected['u']
+    vData = dsSelected['v_component_of_wind'] if 'v_component_of_wind' in dsSelected else dsSelected['v']
     
     # Get surface pressure
-    if not Path(sfc_file_path).exists():
-        raise FileNotFoundError(f"Surface data file required for Method 2: {sfc_file_path}")
+    if not Path(sfcFilePath).exists():
+        raise FileNotFoundError(f"Surface data file required for Method 2: {sfcFilePath}")
         
-    ds_sfc = xr.open_dataset(sfc_file_path)
-    ds_sfc_sel = ds_sfc.interp(latitude=location['latitude'], longitude=location['longitude'], method='linear')
+    dsSfc = xr.open_dataset(sfcFilePath)
+    dsSfcSel = dsSfc.interp(latitude=location['latitude'], longitude=location['longitude'], method='linear')
     
-    # Match the time selection from ds_selected
+    # Match the time selection from dsSelected
     # Get the time coordinates that were actually selected
-    if hasattr(ds_selected, 'valid_time'):
-        time_coord = 'valid_time'
-        selected_times = ds_selected.valid_time
-    elif hasattr(ds_selected, 'time'):
-        time_coord = 'time' 
-        selected_times = ds_selected.time
+    if hasattr(dsSelected, 'valid_time'):
+        timeCoord = 'valid_time'
+        selectedTimes = dsSelected.valid_time
+    elif hasattr(dsSelected, 'time'):
+        timeCoord = 'time' 
+        selectedTimes = dsSelected.time
     else:
-        raise ValueError("Could not find time coordinate in ds_selected")
+        raise ValueError("Could not find time coordinate in dsSelected")
         
     # Select matching times in surface data
-    ds_sfc_sel = ds_sfc_sel.sel(**{time_coord: selected_times})
-    sp = ds_sfc_sel['sp'].values if 'sp' in ds_sfc_sel else np.exp(ds_sfc_sel['lnsp'].values)
-    ds_sfc.close()
+    dsSfcSel = dsSfcSel.sel(**{timeCoord: selectedTimes})
+    sp = dsSfcSel['sp'].values if 'sp' in dsSfcSel else np.exp(dsSfcSel['lnsp'].values)
+    dsSfc.close()
     
     # Get surface geopotential
-    geopotential_file = Path(sfc_file_path).parent / 'era5_geopotential.netcdf'
-    if not geopotential_file.exists():
-        raise FileNotFoundError(f"Surface geopotential file required for Method 2: {geopotential_file}")
+    geopotentialFile = Path(sfcFilePath).parent / 'era5_geopotential.netcdf'
+    if not geopotentialFile.exists():
+        raise FileNotFoundError(f"Surface geopotential file required for Method 2: {geopotentialFile}")
         
-    ds_geo = xr.open_dataset(geopotential_file)
-    ds_geo_sel = ds_geo.interp(latitude=location['latitude'], longitude=location['longitude'], method='linear')
-    z_sfc = ds_geo_sel['z'].values[0] if 'z' in ds_geo_sel else ds_geo_sel['geopotential'].values[0]
-    ds_geo.close()
+    dsGeo = xr.open_dataset(geopotentialFile)
+    dsGeoSel = dsGeo.interp(latitude=location['latitude'], longitude=location['longitude'], method='linear')
+    zSfc = dsGeoSel['z'].values[0] if 'z' in dsGeoSel else dsGeoSel['geopotential'].values[0]
+    dsGeo.close()
 
     # Calculate altitudes at each timestep using hydrostatic equation
     # This gives altitudes relative to the surface geopotential
-    altitudes_relative_to_surface = calculate_geopotential_from_levels(
-        t_data.values, q_data.values, sp, z_sfc, L137_COEFFICIENTS, L137_COEFFICIENTS, levels.values
+    altitudesRelativeToSurface = calculate_geopotential_from_levels(
+        tData.values, qData.values, sp, zSfc, L137_COEFFICIENTS, L137_COEFFICIENTS, levels.values
     )
     
     # Convert to altitudes above surface by subtracting the surface altitude
-    surface_altitude = z_sfc / STANDARD_GRAVITY
-    altitudes_time_varying = altitudes_relative_to_surface - surface_altitude
+    surfaceAltitude = zSfc / STANDARD_GRAVITY
+    altitudesTimeVarying = altitudesRelativeToSurface - surfaceAltitude
     
     # Interpolate wind data to target altitudes at each timestep
-    wind_east_interp = interpolate_profiles(u_data.values, altitudes_time_varying, target_altitudes)
-    wind_north_interp = interpolate_profiles(v_data.values, altitudes_time_varying, target_altitudes)
+    windEastInterp = interpolate_profiles(uData.values, altitudesTimeVarying, targetAltitudes)
+    windNorthInterp = interpolate_profiles(vData.values, altitudesTimeVarying, targetAltitudes)
     
-    return wind_east_interp, wind_north_interp, target_altitudes
+    return windEastInterp, windNorthInterp, targetAltitudes
 
 
-def method3_approximate_altitudes(ds_selected, levels, target_altitudes):
-    """
-    Method 3: Use approximate altitudes and interpolate.
+def method3_approximate_altitudes(dsSelected, levels, targetAltitudes):
+    """Use approximate altitudes from lookup table and interpolate.
     
-    :param ds_selected: Location-selected xarray Dataset
-    :param levels: Model level numbers
-    :param target_altitudes: Target altitude levels for interpolation [m]
-    :return: Interpolated wind data at target altitudes
-    :rtype: tuple (wind_east, wind_north, altitudes)
+    Method 3: Uses predefined model-level-to-altitude mapping based on standard atmosphere.
+    
+    Args:
+        dsSelected (xarray.Dataset): Location-selected xarray Dataset.
+        levels (array): Model level numbers.
+        targetAltitudes (array): Target altitude levels for interpolation [m].
+
+    Returns:
+        tuple: (windEast, windNorth, altitudes) interpolated to target altitudes.
     """
     print("Using Method 3: Approximate altitude calculation")
     
     # Get wind data
-    u_data = ds_selected['u_component_of_wind'] if 'u_component_of_wind' in ds_selected else ds_selected['u']
-    v_data = ds_selected['v_component_of_wind'] if 'v_component_of_wind' in ds_selected else ds_selected['v']
+    uData = dsSelected['u_component_of_wind'] if 'u_component_of_wind' in dsSelected else dsSelected['u']
+    vData = dsSelected['v_component_of_wind'] if 'v_component_of_wind' in dsSelected else dsSelected['v']
     
     # Get approximate altitudes for each level
-    level_altitude_map = get_pressure_level_altitudes()
-    approx_altitudes = np.array([level_altitude_map.get(l, np.nan) for l in levels.values])
+    levelAltitudeMap = get_pressure_level_altitudes()
+    approxAltitudes = np.array([levelAltitudeMap.get(l, np.nan) for l in levels.values])
     
     # Check for missing altitude mappings
-    if np.any(np.isnan(approx_altitudes)):
-        missing_levels = levels.values[np.isnan(approx_altitudes)]
-        raise ValueError(f"No approximate altitudes available for levels: {missing_levels}")
+    if np.any(np.isnan(approxAltitudes)):
+        missingLevels = levels.values[np.isnan(approxAltitudes)]
+        raise ValueError(f"No approximate altitudes available for levels: {missingLevels}")
     
     # Create time-varying altitude array (same for all timesteps)
-    n_times = u_data.shape[0]
-    altitudes_time_varying = np.tile(approx_altitudes, (n_times, 1))
+    nTimes = uData.shape[0]
+    altitudesTimeVarying = np.tile(approxAltitudes, (nTimes, 1))
     
     # Interpolate wind data to target altitudes at each timestep
-    wind_east_interp = interpolate_profiles(u_data.values, altitudes_time_varying, target_altitudes)
-    wind_north_interp = interpolate_profiles(v_data.values, altitudes_time_varying, target_altitudes)
+    windEastInterp = interpolate_profiles(uData.values, altitudesTimeVarying, targetAltitudes)
+    windNorthInterp = interpolate_profiles(vData.values, altitudesTimeVarying, targetAltitudes)
     
-    return wind_east_interp, wind_north_interp, target_altitudes
+    return windEastInterp, windNorthInterp, targetAltitudes
 
 
-def calculate_geopotential_from_levels(t, q, sp, z_sfc, a, b, levels):
-    """
-    Calculate geopotential height on model levels using hydrostatic equation.
+def calculate_geopotential_from_levels(t, q, sp, zSfc, a, b, levels):
+    """Calculate geopotential height on model levels using hydrost
+
+atic equation.
     
-    :param t: Temperature [K] (time, level)
-    :param q: Specific humidity [kg/kg] (time, level)
-    :param sp: Surface pressure [Pa] (time)
-    :param z_sfc: Surface geopotential [m²/s²] (scalar or time)
-    :param a: A coefficients [Pa]
-    :param b: B coefficients [dimensionless]
-    :param levels: Model level numbers (1-based) corresponding to t columns
-    :return: Geopotential height [m] (time, level)
+    Args:
+        t (ndarray): Temperature [K] with shape (time, level).
+        q (ndarray): Specific humidity [kg/kg] with shape (time, level).
+        sp (ndarray): Surface pressure [Pa] with shape (time,).
+        zSfc (float or ndarray): Surface geopotential [m²/s²]  (scalar or time).
+        a (list): A coefficients [Pa].
+        b (list): B coefficients [dimensionless].
+        levels (ndarray): Model level numbers (1-based) corresponding to t columns.
+
+    Returns:
+        ndarray: Geopotential height [m] with shape (time, level).
     """
-    n_samples = t.shape[0]
-    n_levels_data = t.shape[1]
+    nSamples = t.shape[0]
+    nLevelsData = t.shape[1]
     
     # Ensure a and b are numpy arrays
-    # a, b are lists of tuples (k, a_val, b_val)
+    # a, b are lists of tuples (k, aVal, bVal)
     # We want to access them by index k.
     # Since L137_COEFFICIENTS is sorted by k from 0 to 137, we can just use indices.
-    a_coeffs = np.array([x[1] for x in a])
-    b_coeffs = np.array([x[2] for x in b])
+    aCoeffs = np.array([x[1] for x in a])
+    bCoeffs = np.array([x[2] for x in b])
     
     # Sort data levels from surface (137) to top (1)
     # levels might be [1, 2, ...] or [137, 136, ...]
     # We want to process from bottom up.
-    sort_idx = np.argsort(levels)[::-1] # Descending order (e.g. 137, 136, ...)
-    sorted_levels = levels[sort_idx]
+    sortIdx = np.argsort(levels)[::-1]  # Descending order (e.g. 137, 136, ...)
+    sortedLevels = levels[sortIdx]
     
     # Check if we start at surface
-    if sorted_levels[0] != 137:
-        warnings.warn(f"Data starts at level {sorted_levels[0]}, not surface (137). Assuming standard atmosphere below.")
+    if sortedLevels[0] != 137:
+        warnings.warn(f"Data starts at level {sortedLevels[0]}, not surface (137). Assuming standard atmosphere below.")
         pass
 
     # Output array for geopotential height (same order as input t)
     h = np.zeros_like(t)
     
     # Initialize geopotential at the lower interface with surface geopotential
-    phi_lower = np.asarray(z_sfc)
+    phiLower = np.asarray(zSfc)
     
     # Iterate through sorted levels (bottom to top)
-    for i in range(n_levels_data):
-        lvl = int(sorted_levels[i]) # e.g. 137
-        idx = sort_idx[i] # index in t
+    for i in range(nLevelsData):
+        lvl = int(sortedLevels[i])  # e.g. 137
+        idx = sortIdx[i]  # index in t
         
         # Layer lvl is between half-level lvl-1 (upper) and lvl (lower)
-        # Indices in a_coeffs are same as half-level indices.
+        # Indices in aCoeffs are same as half-level indices.
         
         # Lower interface pressure (at lvl)
-        # ph_lower = a[lvl] + b[lvl] * sp
-        p_lower = a_coeffs[lvl] + b_coeffs[lvl] * sp
+        # phLower = a[lvl] + b[lvl] * sp
+        pLower = aCoeffs[lvl] + bCoeffs[lvl] * sp
         
         # Upper interface pressure (at lvl-1)
         # Note: lvl-1 corresponds to half-level index lvl-1
         if lvl == 1:
             # Top layer: upper interface is at level 0 (top of atmosphere)
-            p_upper = a_coeffs[0] + b_coeffs[0] * sp  # Should be ~0
+            pUpper = aCoeffs[0] + bCoeffs[0] * sp  # Should be ~0
         else:
-            p_upper = a_coeffs[lvl-1] + b_coeffs[lvl-1] * sp
+            pUpper = aCoeffs[lvl-1] + bCoeffs[lvl-1] * sp
         
         # Virtual temperature of the layer
-        tv_layer = t[:, idx] * (1.0 + 0.609133 * q[:, idx])
+        tvLayer = t[:, idx] * (1.0 + 0.609133 * q[:, idx])
         
         # Thickness
-        # d_phi = Rd * Tv * ln(p_lower / p_upper)
-        # Avoid div by zero if p_upper is 0 (top of atmosphere)
-        if lvl == 1 or np.any(p_upper <= 0):
-             # Top layer or zero pressure: use approximation
-             d_phi = R_D * tv_layer * 10.0  # Small layer thickness
-        else:
-             d_phi = R_D * tv_layer * np.log(p_lower / p_upper)
+        # dPhi = Rd * Tv * ln(pLower / pUpper)
+        # Avoid div by zero if pUpper is 0 (top of atmosphere)
+        if lvl == 1 or np.any(pUpper <= 0):
+            # Top layer or zero pressure: use approximation
+            dPhi = R_D * tvLayer * 10.0  # Small layer thickness        else:
+            dPhi = R_D * tvLayer * np.log(pLower / pUpper)
              
         # Geopotential at upper interface
-        phi_upper = phi_lower + d_phi
+        phiUpper = phiLower + dPhi
         
         # Geopotential at full level (average)
-        phi_full = 0.5 * (phi_lower + phi_upper)
+        phiFull = 0.5 * (phiLower + phiUpper)
         
         # Store result
-        h[:, idx] = phi_full / STANDARD_GRAVITY
+        h[:, idx] = phiFull / STANDARD_GRAVITY
         
-        # Update phi_lower for next layer (which is the one above)
+        # Update phiLower for next layer (which is the one above)
         # The upper interface of this layer is the lower interface of the next layer (lvl-1)
-        phi_lower = phi_upper
+        phiLower = phiUpper
         
     return h
 
@@ -408,7 +416,7 @@ def get_pressure_level_altitudes():
     """
     # ICAO standard atmosphere altitudes for ERA5 L137 model levels (in meters)
     # Ordered from level 1 (top) to level 137 (surface)
-    altitude_levels_all = [79301.79, 73721.58, 71115.75, 68618.43, 66210.99, 63890.03, 61651.77, 59492.5, 57408.61,
+    altitudeLevelsAll = [79301.79, 73721.58, 71115.75, 68618.43, 66210.99, 63890.03, 61651.77, 59492.5, 57408.61,
                           55396.62, 53453.2, 51575.15, 49767.41, 48048.7, 46416.22, 44881.17, 43440.23, 42085, 40808.05,
                           39602.76, 38463.25, 37384.22, 36360.94, 35389.15, 34465, 33585.02, 32746.04, 31945.53, 31177.59,
                           30438.54, 29726.69, 29040.48, 28378.46, 27739.29, 27121.74, 26524.63, 25946.9, 25387.55,
@@ -424,65 +432,74 @@ def get_pressure_level_altitudes():
                           136.62, 106.54, 79.04, 53.92, 30.96, 10]
     
     # Create mapping from model level (1-137) to altitude
-    level_altitude_map = {}
-    for i, altitude in enumerate(altitude_levels_all):
+    levelAltitudeMap = {}
+    for i, altitude in enumerate(altitudeLevelsAll):
         level = i + 1  # Model levels are 1-based
-        level_altitude_map[level] = altitude
+        levelAltitudeMap[level] = altitude
     
-    return level_altitude_map
+    return levelAltitudeMap
 
 
-def interpolate_profiles(data, altitudes, target_altitudes):
-    """
-    Interpolate vertical profiles to target altitudes.
+def interpolate_profiles(data, altitudes, targetAltitudes):
+    """Interpolate vertical profiles to target altitudes.
     
-    :param data: Array of shape (n_time, n_levels)
-    :param altitudes: Array of shape (n_time, n_levels)
-    :param target_altitudes: Array of shape (n_targets,)
-    :param fill_value: Value to use for extrapolation at the bottom (left)
-    :return: Array of shape (n_time, n_targets)
+    Args:
+        data (ndarray): Array of shape (nTime, nLevels).
+        altitudes (ndarray): Array of shape (nTime, nLevels).
+        targetAltitudes (ndarray): Array of shape (nTargets,).
+
+    Returns:
+        ndarray: Interpolated data of shape (nTime, nTargets).
     """
-    n_time = data.shape[0]
-    n_targets = len(target_altitudes)
-    result = np.zeros((n_time, n_targets))
+    nTime = data.shape[0]
+    nTargets = len(targetAltitudes)
+    result = np.zeros((nTime, nTargets))
     
-    for t in range(n_time):
-        prof_data = data[t, :]
-        prof_alt = altitudes[t, :]
+    for t in range(nTime):
+        profData = data[t, :]
+        profAlt = altitudes[t, :]
         
         # Remove NaNs if any
-        valid = ~np.isnan(prof_alt) & ~np.isnan(prof_data)
+        valid = ~np.isnan(profAlt) & ~np.isnan(profData)
         if not np.any(valid):
             result[t, :] = np.nan
             continue
             
-        prof_alt = prof_alt[valid]
-        prof_data = prof_data[valid]
+        profAlt = profAlt[valid]
+        profData = profData[valid]
         
         # Sort by altitude
-        sort_idx = np.argsort(prof_alt)
-        prof_alt_sorted = prof_alt[sort_idx]
-        prof_data_sorted = prof_data[sort_idx]
+        sortIdx = np.argsort(profAlt)
+        profAltSorted = profAlt[sortIdx]
+        profDataSorted = profData[sortIdx]
         
         # Interpolate
-        result[t, :] = np.interp(target_altitudes, prof_alt_sorted, prof_data_sorted)
+        result[t, :] = np.interp(targetAltitudes, profAltSorted, profDataSorted)
         
     return result
 
-def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, target_altitudes=None):
-    """
-    Read ERA5 data for a single month using one of three altitude calculation methods.
+def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetAltitudes=None):
+    """Read ERA5 data for a single month using one of three altitude calculation methods.
 
     Uses bilinear interpolation to extract data at the specified location, providing 
     more accurate wind data by interpolating between the 4 surrounding ERA5 grid points
     rather than using the nearest neighbor.
 
-    :param filePath: Path to ERA5 NetCDF file
-    :param location: Location specification with 'latitude' and 'longitude' keys
-    :param altitudeRange: (min_altitude, max_altitude) in meters
-    :param sfcFilePath: Path to corresponding surface data file (required for Method 2)
-    :param target_altitudes: Target altitudes for interpolation [m]
-    :return: Dictionary containing wind data
+    Args:
+        filePath (str): Path to ERA5 NetCDF file.
+        location (dict): Location specification with 'latitude' and 'longitude' keys.
+        altitudeRange (tuple): (minAltitude, maxAltitude) in meters.
+        sfcFilePath (str, optional): Path to corresponding surface data file (required for Method 2). Defaults to None.
+        targetAltitudes (ndarray, optional): Target altitudes for interpolation [m]. Defaults to None.
+    
+    Returns:
+        dict: Dictionary containing wind data with keys:
+            - 'wind_speed_east': East wind component [m/s]
+            - 'wind_speed_north': North wind component [m/s]
+            - 'datetime': Array of datetime values
+            - 'altitude': Array of altitude values [m]
+            - 'altitude_method_used': Method used (1, 2, or 3)
+            - 'selected_levels': Target altitude levels
     """
     # Input validation
     if location is None:
@@ -492,9 +509,9 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, target_
     ds = xr.open_dataset(filePath)
     
     # Check data format and available variables
-    has_geopotential = 'geopotential' in ds or 'z' in ds
-    has_temperature = 'temperature' in ds or 't' in ds
-    has_humidity = 'specific_humidity' in ds or 'q' in ds
+    hasGeopotential = 'geopotential' in ds or 'z' in ds
+    hasTemperature = 'temperature' in ds or 't' in ds
+    hasHumidity = 'specific_humidity' in ds or 'q' in ds
     
     # Get model levels
     if 'model_level' in ds:
@@ -507,37 +524,37 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, target_
     # Select location using bilinear interpolation
     latTarget = location['latitude']
     lonTarget = location['longitude']
-    ds_selected = ds.interp(latitude=latTarget, longitude=lonTarget, method='linear')
+    dsSelected = ds.interp(latitude=latTarget, longitude=lonTarget, method='linear')
     
     # Set up target altitudes
-    if target_altitudes is None:
-        min_alt, max_alt = altitudeRange
-        target_altitudes = np.arange(min_alt, max_alt + 1, 10)
+    if targetAltitudes is None:
+        minAlt, maxAlt = altitudeRange
+        targetAltitudes = np.arange(minAlt, maxAlt + 1, 10)
     
     # Choose and apply altitude calculation method
     if FORCE_APPROXIMATE_ALTITUDES:
         # Method 3: Forced approximate altitudes
-        wind_east, wind_north, altitudes = method3_approximate_altitudes(
-            ds_selected, levels, target_altitudes
+        windEast, windNorth, altitudes = method3_approximate_altitudes(
+            dsSelected, levels, targetAltitudes
         )
-        altitude_method_used = 3
+        altitudeMethodUsed = 3
         
-    elif has_geopotential:
+    elif hasGeopotential:
         # Method 1: Geopotential data available
-        wind_east, wind_north, altitudes = method1_geopotential_altitudes(
-            ds_selected, levels, target_altitudes
+        windEast, windNorth, altitudes = method1_geopotential_altitudes(
+            dsSelected, levels, targetAltitudes
         )
-        altitude_method_used = 1
+        altitudeMethodUsed = 1
         
-    elif has_temperature and has_humidity:
+    elif hasTemperature and hasHumidity:
         # Method 2: Temperature and humidity available
         if sfcFilePath is None:
             raise ValueError("Surface data file path required for Method 2 (temperature/humidity)")
         
-        wind_east, wind_north, altitudes = method2_temperature_humidity_altitudes(
-            ds_selected, levels, target_altitudes, sfcFilePath, location
+        windEast, windNorth, altitudes = method2_temperature_humidity_altitudes(
+            dsSelected, levels, targetAltitudes, sfcFilePath, location
         )
-        altitude_method_used = 2
+        altitudeMethodUsed = 2
         
     else:
         raise ValueError(
@@ -548,20 +565,20 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, target_
         )
     
     # Get time coordinate
-    if 'time' in ds_selected:
-        datetime_values = ds_selected.time.values
-    elif 'valid_time' in ds_selected:
-        datetime_values = ds_selected.valid_time.values
+    if 'time' in dsSelected:
+        datetimeValues = dsSelected.time.values
+    elif 'valid_time' in dsSelected:
+        datetimeValues = dsSelected.valid_time.values
     else:
         raise ValueError("No time coordinate found in dataset")
     
     result = {
-        'wind_speed_east': wind_east,
-        'wind_speed_north': wind_north,
-        'datetime': datetime_values,
+        'wind_speed_east': windEast,
+        'wind_speed_north': windNorth,
+        'datetime': datetimeValues,
         'altitude': altitudes,
-        'altitude_method_used': altitude_method_used,
-        'selected_levels': target_altitudes,
+        'altitude_method_used': altitudeMethodUsed,
+        'selected_levels': targetAltitudes,
     }
     
     ds.close()
@@ -578,20 +595,21 @@ def read_data(config=None):
     Uses bilinear interpolation to extract data at specified locations, providing
     more accurate wind data by interpolating between surrounding ERA5 grid points.
 
-    :param config: Configuration dictionary with optional keys:
-        - 'data_dir': Path to data directory (default: relative to script)
-        - 'location': Dict with 'latitude' and 'longitude' keys
-        - 'altitude_range': Tuple (min_alt, max_alt) in meters
-        - 'years': Tuple (start_year, end_year) to limit data range
-    :type config: dict, optional
-    :return: Dictionary containing:
-        - 'wind_speed_east': East wind component [m/s] (n_samples, n_altitudes)
-        - 'wind_speed_north': North wind component [m/s] (n_samples, n_altitudes)
-        - 'n_samples': Number of time samples
-        - 'datetime': Array of datetime values
-        - 'altitude': Array of altitude values [m]
-        - 'years': Tuple of (first_year, last_year)
-    :rtype: dict
+    Args:
+        config (dict, optional): Configuration dictionary with optional keys:
+            - 'data_dir': Path to data directory (default: relative to script)
+            - 'location': Dict with 'latitude' and 'longitude' keys
+            - 'altitude_range': Tuple (minAlt, maxAlt) in meters
+            - 'years': Tuple (startYear, endYear) to limit data range
+    
+    Returns:
+        dict: Dictionary containing:
+            - 'wind_speed_east': East wind component [m/s] (nSamples, nAltitudes)
+            - 'wind_speed_north': North wind component [m/s] (nSamples, nAltitudes)
+            - 'n_samples': Number of time samples
+            - 'datetime': Array of datetime values
+            - 'altitude': Array of altitude values [m]
+            - 'years': Tuple of (firstYear, lastYear)
     """
     # Suppress xarray backend loading warnings (cfgrib is optional)
     warnings.filterwarnings('ignore', message='.*cfgrib.*', category=RuntimeWarning)
@@ -600,7 +618,8 @@ def read_data(config=None):
     if config is None:
         config = {}
 
-    dataDir = Path(config.get('data_dir', DEFAULT_DATA_DIR))
+
+    dataDir = Path(config.get('data_dir'))
     location = config.get('location', None)
     altitudeRange = config.get('altitude_range', (0, 1000))
     years = config.get('years', None)
@@ -638,8 +657,8 @@ def read_data(config=None):
         raise ValueError("No files remain after year filtering")
 
     # Define target altitudes for interpolation
-    min_alt, max_alt = altitudeRange
-    target_altitudes = np.arange(min_alt, max_alt + 1, 10) # 10m resolution
+    minAlt, maxAlt = altitudeRange
+    targetAltitudes = np.arange(minAlt, maxAlt + 1, 10) # 10m resolution
 
     # Read all monthly files
     allData = []
@@ -658,7 +677,7 @@ def read_data(config=None):
                  sfcFilePath = Path(filePath).parent.parent / 'ERA5' / sfcName
         
         try:
-            monthData = read_era5_month(filePath, location, altitudeRange, sfcFilePath, target_altitudes=target_altitudes)
+            monthData = read_era5_month(filePath, location, altitudeRange, sfcFilePath, targetAltitudes=targetAltitudes)
             allData.append(monthData)
         except Exception as e:
             warnings.warn(f"Error reading {filePath}: {e}")
@@ -683,16 +702,16 @@ def read_data(config=None):
 
     nSamples = len(combinedDatetime)
     # Report which altitude methods were used
-    methods_used = [data.get('altitude_method_used') for data in allData if data.get('altitude_method_used') is not None]
-    unique_methods = set()
+    methodsUsed = [data.get('altitude_method_used') for data in allData if data.get('altitude_method_used') is not None]
+    uniqueMethods = set()
     
-    if methods_used:
-        unique_methods = set(methods_used)
-        method_names = {1: "Geopotential", 2: "Temperature/Humidity", 3: "Approximate"}
-        methods_str = ", ".join([f"Method {m} ({method_names.get(m, 'Unknown')})" for m in sorted(unique_methods)])
-        print(f"Altitude calculation methods used: {methods_str}")
+    if methodsUsed:
+        uniqueMethods = set(methodsUsed)
+        methodNames = {1: "Geopotential", 2: "Temperature/Humidity", 3: "Approximate"}
+        methodsStr = ", ".join([f"Method {m} ({methodNames.get(m, 'Unknown')})" for m in sorted(uniqueMethods)])
+        print(f"Altitude calculation methods used: {methodsStr}")
     else:
-        unique_methods = {3}  # Default to Method 3 if no methods recorded
+        uniqueMethods = {3}  # Default to Method 3 if no methods recorded
     
     print(f"Total samples: {nSamples}")
     print(f"Altitude range: {altitude.min():.1f} - {altitude.max():.1f} m")

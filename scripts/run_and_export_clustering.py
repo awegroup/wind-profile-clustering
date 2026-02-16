@@ -46,7 +46,7 @@ def main():
     # TIP: Run 'python check_data_sources.py' to see which sources are available
     # =============================================================================
     
-    DATA_SOURCE = 'era5'  # Change this to select your data source
+    DATA_SOURCE = 'dowa'  # Change this to select your data source
     
     # =============================================================================
     # DATA SOURCE SPECIFIC CONFIGURATIONS
@@ -84,7 +84,11 @@ def main():
     elif DATA_SOURCE == 'fgw_lidar':
         print("Using FGW lidar data...")
         from wind_profile_clustering.read_data.fgw_lidar import read_data
-        data = read_data()
+        config = {
+            'data_dir': 'data/fgw_lidar',
+            'read_raw_data': False  # Set to True to process raw .rtd files
+        }
+        data = read_data(config)
         outPrefix = 'fgw_lidar'
         
         # Prepare metadata for FGW lidar
@@ -106,11 +110,15 @@ def main():
     elif DATA_SOURCE == 'dowa':
         print("Using DOWA model data...")
         from wind_profile_clustering.read_data.dowa import read_data
-        # Options for DOWA data:
-        # - By name: {'name': 'mmij'} or {'name': 'mmc'}
-        # - By coordinates: {'coords': (lat, lon)}
-        # - By grid indices: {'i_lat': i, 'i_lon': j} or {'iy': i, 'ix': j}
-        data = read_data({'name': 'mmij'})  # Use Maasvlakte Meetmast IJmond location
+        config = {
+            'data_dir': 'data/dowa',
+            'name': 'mmij'  # Options: 'mmij', 'mmc', or use 'coords': (lat, lon)
+            # Alternative location specifications:
+            # 'coords': (52.85, 3.44)  # By coordinates
+            # 'i_lat': i, 'i_lon': j    # By grid indices
+            # 'iy': i, 'ix': j          # By 1-based grid indices
+        }
+        data = read_data(config)
         outPrefix = 'dowa_mmij'
         
         # Prepare metadata for DOWA
