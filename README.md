@@ -8,17 +8,32 @@ Afterwards, functionality to read and use ERA5 data has been added. ERA5 provide
 
 ## Installing the environment and running the code
 
-The code is tested in an Anaconda environment with Python 3.9.1 or higher. Create the environment using:
+The code is tested with Python 3.9 or higher. 
+
+### Installation with Conda (Recommended)
+
+Create and activate a new conda environment:
 
 ```bash
-conda create --name [env_name] --file requirements.txt python=3.9.1
+conda create --name wind_clustering python=3.9
+conda activate wind_clustering
 ```
 
-Replace `[env_name]` with a name of your choice. Activate the environment:
+Install the package and its dependencies:
 
 ```bash
-conda activate [env_name]
+pip install -e .
 ```
+
+### Installation with pip only
+
+If you're not using conda, install directly with pip:
+
+```bash
+pip install -e .
+```
+
+The `-e` flag installs the package in editable mode, allowing you to modify the code without reinstalling.
 
 ### Data Setup
 
