@@ -87,7 +87,7 @@ def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_row
         j = i//n_cols*2
         ax[j, k].plot(prl, altitudes, label="Parallel", color='#ff7f0e')
         ax[j, k].plot(prp, altitudes, label="Perpendicular", color='#1f77b4')
-        ax[0, 0].get_shared_y_axes().join(ax[0, 0], ax[j, k])
+        ax[j, k].sharey(ax[0, 0])
 
         wind_dir = []
         for v_prl, v_prp in zip(wind_prl[i, :], wind_prp[i, :]):
@@ -323,10 +323,55 @@ def predict_cluster(training_data, n_clusters, predict_fun, cluster_mapping):
 
 
 if __name__ == '__main__':
-    from read_data.fgw_lidar import read_data
-    data = read_data()
-    # from read_data.dowa import read_data
-    # data = read_data({'name': 'mmij'})
+    # =============================================================================
+    # DATA SOURCE CONFIGURATION
+    # =============================================================================
+    # Choose which data source to use by setting DATA_SOURCE to one of:
+    # 'era5'      - Use ERA5 reanalysis data from NetCDF files
+    # 'fgw_lidar' - Use FGW lidar measurements from CSV file
+    # 'dowa'      - Use DOWA model data from NetCDF files
+    #
+    # TIP: Run 'python check_data_sources.py' to see which sources are available
+    # =============================================================================
+    
+    DATA_SOURCE = 'era5'  # Change this to select your data source
+    
+    # =============================================================================
+    # DATA SOURCE SPECIFIC CONFIGURATIONS
+    # =============================================================================
+    
+    if DATA_SOURCE == 'era5':
+        print("Using ERA5 reanalysis data...")
+        from read_data.era5 import read_data
+        config = {
+            'data_dir': 'data/ERA5',
+            'location': {'latitude': 52.0, 'longitude': 4.0},  # Netherlands
+            'altitude_range': (10, 500),  # 10-500m above ground
+            'years': (2010, 2011)  # Limit to 2010-2013 for faster processing
+        }
+        data = read_data(config)
+        
+    elif DATA_SOURCE == 'fgw_lidar':
+        print("Using FGW lidar data...")
+        from read_data.fgw_lidar import read_data
+        data = read_data()
+        
+    elif DATA_SOURCE == 'dowa':
+        print("Using DOWA model data...")
+        from read_data.dowa import read_data
+        # Options for DOWA data:
+        # - By name: {'name': 'mmij'} or {'name': 'mmc'}
+        # - By coordinates: {'coords': (lat, lon)}
+        # - By grid indices: {'i_lat': i, 'i_lon': j} or {'iy': i, 'ix': j}
+        data = read_data({'name': 'mmij'})  # Use Maasvlakte Meetmast IJmond location
+        
+    else:
+        raise ValueError(f"Unknown data source: {DATA_SOURCE}. "
+                        "Choose from 'era5', 'fgw_lidar', or 'dowa'.\n"
+                        "Run 'python check_data_sources.py' to see available options.")
+    
+    print(f"Loaded {data['n_samples']} samples from {data['years'][0]} to {data['years'][1]}")
+    print(f"Altitude range: {data['altitude'].min():.1f} - {data['altitude'].max():.1f} m")
     from preprocess_data import preprocess_data
     processed_data = preprocess_data(data)
     n_clusters = 8

@@ -1,0 +1,11 @@
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore NetCDF files
+*.netcdf
+
+# Ignore .yml results files
+results/*.yml
+results/wind_profiles_and_probabilities_era5.yml
