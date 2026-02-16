@@ -77,9 +77,3 @@ def preprocess_data(data, remove_low_wind_samples=True, return_copy=True):
     data = normalize_data(data)
 
     return data
-
-
-if __name__ == '__main__':
-    from .read_data.dowa import read_data
-    wind_data = read_data({'i_lat': 110, 'i_lon': 55})
-    preprocess_data(wind_data)

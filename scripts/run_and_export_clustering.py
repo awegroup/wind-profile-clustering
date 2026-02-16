@@ -1,30 +1,40 @@
-"""
-Script for exporting wind profiles and probabilities to YAML format.
+"""Run wind profile clustering analysis and export results to YAML.
 
-This script runs the export functionality to generate YAML files containing
-wind profile shapes and their probability distributions.
+This script loads wind data from various sources (ERA5, FGW lidar, or DOWA),
+performs clustering using PCA and K-means, creates visualizations, and exports
+the results to YAML format for further use.
 """
 
+import matplotlib.pyplot as plt
 import sys
 from pathlib import Path
+import numpy as np
 
 # Add src directory to path for imports
-src_path = Path(__file__).parent.parent / 'src'
-sys.path.insert(0, str(src_path))
+srcPath = Path(__file__).parent.parent / 'src'
+sys.path.insert(0, str(srcPath))
 
-# Import and run the main function from the export module
+from wind_profile_clustering.clustering import perform_clustering_analysis
+from wind_profile_clustering.plotting import plot_all_results
 from wind_profile_clustering.export_profiles_and_probabilities_yml import (
     export_wind_profile_shapes_and_probabilities
 )
-from wind_profile_clustering.clustering import cluster_normalized_wind_profiles_pca, predict_cluster
-from wind_profile_clustering.preprocess_data import preprocess_data
-import numpy as np
 
 
 def main():
+    """Run wind profile clustering analysis and export results.
+    
+    User can configure:
+    - DATA_SOURCE: Choose between 'era5', 'fgw_lidar', or 'dowa'
+    - N_CLUSTERS: Number of clusters to create (default: 8)
+    - SAVE_PLOTS: Save plots as PDF files (default: True)
     """
-    Main function to export wind profiles and probabilities.
-    """
+    # =============================================================================
+    # USER CONFIGURATION
+    # =============================================================================
+    N_CLUSTERS = 8  # Number of clusters to create
+    SAVE_PLOTS = True  # Save plots as PDF files in results/ directory
+    
     # =============================================================================
     # DATA SOURCE CONFIGURATION
     # =============================================================================
@@ -32,6 +42,8 @@ def main():
     # 'era5'      - Use ERA5 reanalysis data from NetCDF files
     # 'fgw_lidar' - Use FGW lidar measurements from CSV file
     # 'dowa'      - Use DOWA model data from NetCDF files
+    #
+    # TIP: Run 'python check_data_sources.py' to see which sources are available
     # =============================================================================
     
     DATA_SOURCE = 'era5'  # Change this to select your data source
@@ -46,11 +58,11 @@ def main():
         config = {
             'data_dir': 'data/era5',
             'location': {'latitude': 52.0, 'longitude': 4.0},  # Netherlands
-            'altitude_range': (0, 500),  # 0-500m above ground
-            'years': (2011, 2011)  # Test with just one year
+            'altitude_range': (10, 500),  # 10-500m above ground
+            'years': (2011, 2017)  # Years to include
         }
         data = read_data(config)
-        out_prefix = 'era5'
+        outPrefix = 'era5'
         
         # Prepare metadata for ERA5
         metadata = {
@@ -63,9 +75,9 @@ def main():
                 'start_year': config['years'][0],
                 'end_year': config['years'][1],
                 'years_included': list(range(config['years'][0], config['years'][1] + 1)),
-                'months_included': 'all'  # Will be updated based on available data
+                'months_included': 'all'
             },
-            'altitude_range_m': list(config['altitude_range']),  # Convert tuple to list
+            'altitude_range_m': list(config['altitude_range']),
             'note': 'ERA5 reanalysis data processed for wind profile clustering analysis'
         }
         
@@ -73,7 +85,7 @@ def main():
         print("Using FGW lidar data...")
         from wind_profile_clustering.read_data.fgw_lidar import read_data
         data = read_data()
-        out_prefix = 'fgw_lidar'
+        outPrefix = 'fgw_lidar'
         
         # Prepare metadata for FGW lidar
         metadata = {
@@ -83,8 +95,8 @@ def main():
                 'longitude': None
             },
             'time_range': {
-                'start_year': None,  # Update based on data
-                'end_year': None,
+                'start_year': data['years'][0],
+                'end_year': data['years'][1],
                 'years_included': [],
                 'months_included': 'varies'
             },
@@ -99,18 +111,18 @@ def main():
         # - By coordinates: {'coords': (lat, lon)}
         # - By grid indices: {'i_lat': i, 'i_lon': j} or {'iy': i, 'ix': j}
         data = read_data({'name': 'mmij'})  # Use Maasvlakte Meetmast IJmond location
-        out_prefix = 'dowa_mmij'
+        outPrefix = 'dowa_mmij'
         
         # Prepare metadata for DOWA
         metadata = {
             'data_source': 'DOWA',
             'location': {
-                'latitude': None,  # Update with actual coordinates
+                'latitude': None,  # Update with actual coordinates if available
                 'longitude': None
             },
             'time_range': {
-                'start_year': None,  # Update based on data
-                'end_year': None,
+                'start_year': data['years'][0],
+                'end_year': data['years'][1],
                 'years_included': [],
                 'months_included': 'varies'
             },
@@ -119,34 +131,53 @@ def main():
         
     else:
         raise ValueError(f"Unknown data source: {DATA_SOURCE}. "
-                        "Choose from 'era5', 'fgw_lidar', or 'dowa'.")
+                        "Choose from 'era5', 'fgw_lidar', or 'dowa'.\n"
+                        "Run 'python check_data_sources.py' to see available options.")
     
     print(f"Loaded {data['n_samples']} samples from {data['years'][0]} to {data['years'][1]}")
     print(f"Altitude range: {data['altitude'].min():.1f} - {data['altitude'].max():.1f} m")
+    print(f"Number of clusters: {N_CLUSTERS}")
     
-    # Process data and perform clustering
-    processed_data = preprocess_data(data)
-    n_clusters = 8
-    res = cluster_normalized_wind_profiles_pca(processed_data['training_data'], n_clusters)
-    prl, prp = res['clusters_feature']['parallel'], res['clusters_feature']['perpendicular']
-
-    # Get predictions for full dataset
-    processed_data_full = preprocess_data(data, remove_low_wind_samples=False)
-    labels, frequency_clusters = predict_cluster(processed_data_full['training_data'], n_clusters,
-                                                 res['data_processing_pipeline'].predict, res['cluster_mapping'])
-
+    # Perform clustering analysis
+    results = perform_clustering_analysis(data, N_CLUSTERS)
+    
+    # Extract results
+    processedData = results['processedData']
+    processedDataFull = results['processedDataFull']
+    res = results['clusteringResults']
+    labelsFull = results['labelsFull']
+    frequencyClusters = results['frequencyClusters']
+    
+    # Create all plots
+    print("\nGenerating visualizations...")
+    plot_all_results(processedData, res, processedDataFull, labelsFull, 
+                    frequencyClusters, N_CLUSTERS, savePlots=SAVE_PLOTS)
+    
     # Export to YAML
-    output_file = f'results/wind_profiles_and_probabilities_{out_prefix}.yml'
-    prob_matrix = export_wind_profile_shapes_and_probabilities(
-        data['altitude'], prl, prp, labels, processed_data_full['normalisation_value'], 
-        processed_data_full['reference_vector_direction'], processed_data_full['n_samples'], 
-        n_clusters, output_file, metadata=metadata
+    print("\nExporting results to YAML...")
+    outputFile = f'results/wind_profiles_and_probabilities_{outPrefix}.yml'
+    prl = res['clusters_feature']['parallel']
+    prp = res['clusters_feature']['perpendicular']
+    
+    probMatrix = export_wind_profile_shapes_and_probabilities(
+        data['altitude'], 
+        prl, 
+        prp, 
+        labelsFull, 
+        processedDataFull['normalisation_value'],
+        processedDataFull['reference_vector_direction'], 
+        processedDataFull['n_samples'],
+        N_CLUSTERS, 
+        outputFile, 
+        metadata=metadata
     )
     
-    print(f"Exported wind profiles and probabilities to: {output_file}")
-    print(f"Probability matrix shape: {prob_matrix.shape}")
-    print(f"Total probability sum: {np.sum(prob_matrix):.2f}%")
-    print(f"Total probability per cluster: {np.sum(prob_matrix, axis=(1,2))}")
+    print(f"\nExported wind profiles and probabilities to: {outputFile}")
+    print(f"Probability matrix shape: {probMatrix.shape}")
+    print(f"Total probability sum: {np.sum(probMatrix):.2f}%")
+    print(f"Total probability per cluster: {np.sum(probMatrix, axis=(1,2))}")
+    
+    plt.show()
 
 
 if __name__ == '__main__':

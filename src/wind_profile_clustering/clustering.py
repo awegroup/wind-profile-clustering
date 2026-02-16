@@ -1,5 +1,4 @@
-"""
-Clustering functions for wind profile analysis.
+"""Clustering functions for wind profile analysis.
 
 This module contains functions for clustering normalized wind profiles using
 PCA and K-means clustering algorithms.
@@ -9,6 +8,7 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.pipeline import make_pipeline
 import numpy as np
+from .preprocess_data import preprocess_data
 
 
 def cluster_normalized_wind_profiles_pca(training_data, n_clusters, n_pcs=5, reorder=None):
@@ -111,3 +111,47 @@ def predict_cluster(training_data, n_clusters, predict_fun, cluster_mapping):
         frequency_clusters[l] += 100. / n_samples
 
     return labels, frequency_clusters
+
+
+def perform_clustering_analysis(data, nClusters):
+    """Perform complete clustering analysis on wind profile data.
+
+    This function encapsulates the full clustering workflow: preprocessing data,
+    performing clustering on filtered samples, and predicting cluster labels for
+    the complete dataset.
+
+    Args:
+        data (dict): Raw wind profile data dictionary containing keys like 'altitude',
+            'u_wind', 'v_wind', 'n_samples', 'years', etc.
+        nClusters (int): Number of clusters to create.
+
+    Returns:
+        dict: Dictionary containing all clustering results with keys:
+            - processedData: Preprocessed data (with low wind samples removed).
+            - processedDataFull: Preprocessed full dataset (no samples removed).
+            - clusteringResults: Results from cluster_normalized_wind_profiles_pca.
+            - labelsFull: Cluster labels for all samples in full dataset.
+            - frequencyClusters: Frequency of each cluster in full dataset.
+    """
+    # Preprocess data and perform clustering (removes low wind speed samples)
+    processedData = preprocess_data(data)
+    clusteringResults = cluster_normalized_wind_profiles_pca(
+        processedData['training_data'], nClusters
+    )
+    
+    # Get predictions for full dataset (includes all samples)
+    processedDataFull = preprocess_data(data, remove_low_wind_samples=False)
+    labelsFull, frequencyClusters = predict_cluster(
+        processedDataFull['training_data'],
+        nClusters,
+        clusteringResults['data_processing_pipeline'].predict,
+        clusteringResults['cluster_mapping']
+    )
+    
+    return {
+        'processedData': processedData,
+        'processedDataFull': processedDataFull,
+        'clusteringResults': clusteringResults,
+        'labelsFull': labelsFull,
+        'frequencyClusters': frequencyClusters
+    }

@@ -161,12 +161,3 @@ def analyse_pc(wind_data):
         return prl, prp
 
     plot_mean_and_pc_profiles(altitudes, var, get_pc_profile)
-
-
-if __name__ == '__main__':
-    from read_data.dowa import read_data
-    wind_data = read_data({'name': 'mmij'})
-    from preprocess_data import preprocess_data
-    wind_data = preprocess_data(wind_data)
-    analyse_pc(wind_data)
-    plt.show()

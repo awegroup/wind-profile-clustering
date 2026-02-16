@@ -16,9 +16,8 @@ ylim_pc12 = [-1.1, 1.1]
 x_lim_profiles = [-0.8, 1.25]
 
 
-def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_rows=2):
-    """
-    Plot wind profile shapes showing parallel and perpendicular components.
+def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_rows=2, savePlots=False):
+    """Plot wind profile shapes showing parallel and perpendicular components.
 
     Args:
         altitudes (ndarray): Height levels in meters.
@@ -26,6 +25,7 @@ def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_row
         wind_prp (ndarray): Perpendicular wind speed components for each cluster.
         wind_mag (ndarray): Wind speed magnitudes. Defaults to None.
         n_rows (int): Number of rows in the plot grid. Defaults to 2.
+        savePlots (bool): If True, save the plot as PDF. Defaults to False.
 
     Returns:
         None: Displays the plot.
@@ -84,6 +84,10 @@ def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_row
 
     ax[0, 0].legend(bbox_to_anchor=(-1.5+n_cols*.5, 1.05, 3.+wspace*(n_cols-1), 0.2), loc="lower left", mode="expand",
                     borderaxespad=0, ncol=4)
+    
+    if savePlots:
+        fig.savefig('results/wind_profile_shapes.pdf', bbox_inches='tight')
+        print("Saved: results/wind_profile_shapes.pdf")
 
 
 def plot_bars(array2d, bars_labels=None, ax=None, legend_title="", xticklabels=None):
@@ -129,13 +133,13 @@ def plot_bars(array2d, bars_labels=None, ax=None, legend_title="", xticklabels=N
         ax.set_xticklabels(xticklabels)
 
 
-def visualise_patterns(n_clusters, wind_data, sample_labels, frequency_clusters):
-    """
-    Visualize temporal and meteorological patterns of clusters.
+def visualise_patterns(n_clusters, wind_data, sample_labels, frequency_clusters, savePlots=False):
+    """Visualize temporal and meteorological patterns of clusters.
 
     Creates bar plots showing cluster frequency distributions across:
     - Years
-    - Months    - Hours of day
+    - Months
+    - Hours of day
     - Wind speed bins
     - Wind direction bins
 
@@ -148,6 +152,7 @@ def visualise_patterns(n_clusters, wind_data, sample_labels, frequency_clusters)
             - reference_vector_direction: Wind direction in radians.
         sample_labels (ndarray): Cluster labels for each sample.
         frequency_clusters (ndarray): Overall frequency of each cluster.
+        savePlots (bool): If True, save the plot as PDF. Defaults to False.
 
     Returns:
         None: Displays the plot.
@@ -278,11 +283,14 @@ def visualise_patterns(n_clusters, wind_data, sample_labels, frequency_clusters)
 
     plot_bars(freq2d_wind_dir_bin, wind_dir_bin_lbls, ax=ax_bars[4], legend_title="Upwind direction 100 m bins")
     ax_bars[4].set_ylabel("Within-cluster\nfrequency [%]")
+    
+    if savePlots:
+        fig_bars.savefig('results/cluster_patterns.pdf', bbox_inches='tight')
+        print("Saved: results/cluster_patterns.pdf")
 
 
-def projection_plot_of_clusters(training_data_reduced, labels, clusters_pc):
-    """
-    Plot scatter plot of data projected onto first two principal components.
+def projection_plot_of_clusters(training_data_reduced, labels, clusters_pc, savePlots=False):
+    """Plot scatter plot of data projected onto first two principal components.
 
     Shows the distribution of samples in PC space with cluster centers marked.
 
@@ -290,6 +298,7 @@ def projection_plot_of_clusters(training_data_reduced, labels, clusters_pc):
         training_data_reduced (ndarray): Training data in PC space.
         labels (ndarray): Cluster labels for each sample.
         clusters_pc (ndarray): Cluster centers in PC space.
+        savePlots (bool): If True, save the plot as PDF. Defaults to False.
 
     Returns:
         None: Displays the plot.
@@ -321,11 +330,14 @@ def projection_plot_of_clusters(training_data_reduced, labels, clusters_pc):
 
     plt.xlabel('PC1')
     plt.ylabel('PC2')
+    
+    if savePlots:
+        plt.savefig('results/pc_projection.pdf', bbox_inches='tight')
+        print("Saved: results/pc_projection.pdf")
 
 
-def plot_all_results(processed_data, res, processed_data_full, labels_full, frequency_clusters_full, n_clusters):
-    """
-    Create all plots for clustering results.
+def plot_all_results(processed_data, res, processed_data_full, labels_full, frequency_clusters_full, n_clusters, savePlots=False):
+    """Create all plots for clustering results.
 
     This is a convenience function that creates all standard visualizations:
     - Wind profile shapes
@@ -340,6 +352,7 @@ def plot_all_results(processed_data, res, processed_data_full, labels_full, freq
         labels_full (ndarray): Cluster labels for full dataset.
         frequency_clusters_full (ndarray): Cluster frequencies for full dataset.
         n_clusters (int): Number of clusters.
+        savePlots (bool): If True, save all plots as PDF files. Defaults to False.
 
     Returns:
         None: Displays all plots.
@@ -347,13 +360,13 @@ def plot_all_results(processed_data, res, processed_data_full, labels_full, freq
     prl, prp = res['clusters_feature']['parallel'], res['clusters_feature']['perpendicular']
     
     # Plot wind profile shapes
-    plot_wind_profile_shapes(processed_data['altitude'], prl, prp, (prl ** 2 + prp ** 2) ** .5)
+    plot_wind_profile_shapes(processed_data['altitude'], prl, prp, (prl ** 2 + prp ** 2) ** .5, savePlots=savePlots)
     
     # Visualize patterns
-    visualise_patterns(n_clusters, processed_data, res['sample_labels'], res['frequency_clusters'])
+    visualise_patterns(n_clusters, processed_data, res['sample_labels'], res['frequency_clusters'], savePlots=savePlots)
     
     # Plot PC projection
-    projection_plot_of_clusters(res['training_data_pc'], res['sample_labels'], res['clusters_pc'])
+    projection_plot_of_clusters(res['training_data_pc'], res['sample_labels'], res['clusters_pc'], savePlots=savePlots)
     
     # Compare cluster frequencies
     fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
@@ -364,3 +377,7 @@ def plot_all_results(processed_data, res, processed_data_full, labels_full, freq
     plot_bars(frequency_clusters_full.reshape((1, -1)), ax=ax[1], xticklabels=range(1, n_clusters+1))
     for a in ax:
         a.set_ylabel('Cluster frequency [%]')
+    
+    if savePlots:
+        fig.savefig('results/cluster_frequencies_comparison.pdf', bbox_inches='tight')
+        print("Saved: results/cluster_frequencies_comparison.pdf")
