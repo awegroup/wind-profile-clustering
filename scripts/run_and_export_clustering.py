@@ -34,6 +34,7 @@ def main():
     # =============================================================================
     N_CLUSTERS = 8  # Number of clusters to create
     SAVE_PLOTS = True  # Save plots as PDF files in results/ directory
+    REF_HEIGHT = 200.0  # Reference height for profile normalization (in meters)
     
     # =============================================================================
     # DATA SOURCE CONFIGURATION
@@ -46,7 +47,7 @@ def main():
     # TIP: Run 'python check_data_sources.py' to see which sources are available
     # =============================================================================
     
-    DATA_SOURCE = 'dowa'  # Change this to select your data source
+    DATA_SOURCE = 'era5'  # Change this to select your data source
     
     # =============================================================================
     # DATA SOURCE SPECIFIC CONFIGURATIONS
@@ -147,7 +148,7 @@ def main():
     print(f"Number of clusters: {N_CLUSTERS}")
     
     # Perform clustering analysis
-    results = perform_clustering_analysis(data, N_CLUSTERS)
+    results = perform_clustering_analysis(data, N_CLUSTERS, ref_height=REF_HEIGHT)
     
     # Extract results
     processedData = results['processedData']
@@ -177,7 +178,8 @@ def main():
         processedDataFull['n_samples'],
         N_CLUSTERS, 
         outputFile, 
-        metadata=metadata
+        metadata=metadata,
+        refHeight=REF_HEIGHT
     )
     
     print(f"\nExported wind profiles and probabilities to: {outputFile}")

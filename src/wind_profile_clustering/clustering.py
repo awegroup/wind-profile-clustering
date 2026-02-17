@@ -113,7 +113,7 @@ def predict_cluster(training_data, n_clusters, predict_fun, cluster_mapping):
     return labels, frequency_clusters
 
 
-def perform_clustering_analysis(data, nClusters):
+def perform_clustering_analysis(data, nClusters, ref_height=100.):
     """Perform complete clustering analysis on wind profile data.
 
     This function encapsulates the full clustering workflow: preprocessing data,
@@ -124,6 +124,7 @@ def perform_clustering_analysis(data, nClusters):
         data (dict): Raw wind profile data dictionary containing keys like 'altitude',
             'u_wind', 'v_wind', 'n_samples', 'years', etc.
         nClusters (int): Number of clusters to create.
+        ref_height (float): Reference height for wind profile normalization. Defaults to 100.0.
 
     Returns:
         dict: Dictionary containing all clustering results with keys:
@@ -134,13 +135,13 @@ def perform_clustering_analysis(data, nClusters):
             - frequencyClusters: Frequency of each cluster in full dataset.
     """
     # Preprocess data and perform clustering (removes low wind speed samples)
-    processedData = preprocess_data(data)
+    processedData = preprocess_data(data, ref_height=ref_height)
     clusteringResults = cluster_normalized_wind_profiles_pca(
         processedData['training_data'], nClusters
     )
     
     # Get predictions for full dataset (includes all samples)
-    processedDataFull = preprocess_data(data, remove_low_wind_samples=False)
+    processedDataFull = preprocess_data(data, remove_low_wind_samples=False, ref_height=ref_height)
     labelsFull, frequencyClusters = predict_cluster(
         processedDataFull['training_data'],
         nClusters,

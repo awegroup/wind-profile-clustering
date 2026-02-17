@@ -40,9 +40,12 @@ def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, 
     profiles = []
     scaleFactors = []
     for i, (u, v) in enumerate(zip(prl, prp)):
-        # Calculate magnitude and scale factor at reference height
-        w = np.sqrt(u**2 + v**2)
-        wRef = np.interp(refHeight, heights, w)
+        # Interpolate u and v components at reference height to get exact values
+        uRef = np.interp(refHeight, heights, u)
+        vRef = np.interp(refHeight, heights, v)
+        
+        # Calculate magnitude at reference height from interpolated components
+        wRef = np.sqrt(uRef**2 + vRef**2)
 
         # Calculate scale factor to make magnitude = 1 at reference height
         if wRef == 0:
