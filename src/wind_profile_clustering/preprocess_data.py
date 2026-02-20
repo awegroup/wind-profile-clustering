@@ -1,19 +1,17 @@
 import numpy as np
 from copy import copy
 
-ref_vector_height = 100.
 
-
-def express_profiles_wrt_ref_vector(data):
+def express_profiles_wrt_ref_vector(data, ref_height=100.):
     data['wind_direction'] = np.arctan2(data['wind_speed_north'], data['wind_speed_east'])  # CCW w.r.t. East
 
     # TODO: check if interpolation can be done without the loop
     wind_speed_ref = np.zeros(data['n_samples'])
     ref_dir = np.zeros(data['n_samples'])
     for i in range(data['n_samples']):
-        wind_speed_ref[i] = np.interp(ref_vector_height, data['altitude'], data['wind_speed'][i, :])
-        wind_speed_east_ref = np.interp(ref_vector_height, data['altitude'], data['wind_speed_east'][i, :])
-        wind_speed_north_ref = np.interp(ref_vector_height, data['altitude'], data['wind_speed_north'][i, :])
+        wind_speed_ref[i] = np.interp(ref_height, data['altitude'], data['wind_speed'][i, :])
+        wind_speed_east_ref = np.interp(ref_height, data['altitude'], data['wind_speed_east'][i, :])
+        wind_speed_north_ref = np.interp(ref_height, data['altitude'], data['wind_speed_north'][i, :])
         ref_dir[i] = np.arctan2(wind_speed_north_ref, wind_speed_east_ref)
     data['reference_vector_speed'] = wind_speed_ref
     data['reference_vector_direction'] = ref_dir
@@ -67,19 +65,13 @@ def normalize_data(data):
     return data
 
 
-def preprocess_data(data, remove_low_wind_samples=True, return_copy=True):
+def preprocess_data(data, remove_low_wind_samples=True, return_copy=True, ref_height=100.):
     if return_copy:
         data = copy(data)
     data['wind_speed'] = (data['wind_speed_east']**2 + data['wind_speed_north']**2)**.5
     if remove_low_wind_samples:
         data = remove_lt_mean_wind_speed_value(data, 5.)
-    data = express_profiles_wrt_ref_vector(data)
+    data = express_profiles_wrt_ref_vector(data, ref_height=ref_height)
     data = normalize_data(data)
 
     return data
-
-
-if __name__ == '__main__':
-    from read_data.dowa import read_data
-    wind_data = read_data({'i_lat': 110, 'i_lon': 55})
-    preprocess_data(wind_data)

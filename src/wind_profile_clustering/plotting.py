@@ -1,67 +1,35 @@
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from sklearn.pipeline import make_pipeline
+"""
+Plotting functions for wind profile clustering visualization.
+
+This module contains functions for visualizing wind profiles, clusters, and
+their statistical properties.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from copy import copy
 
+
+# Plot limits and labels
 xlim_pc12 = [-1.1, 1.1]
 ylim_pc12 = [-1.1, 1.1]
 x_lim_profiles = [-0.8, 1.25]
 
 
-def cluster_normalized_wind_profiles_pca(training_data, n_clusters, n_pcs=5, reorder=None):
-    # Use the (prepocessed) data to find the set of profile shapes that represent the variation in the data the best.
-    n_samples = len(training_data)
+def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_rows=2, savePlots=False):
+    """Plot wind profile shapes showing parallel and perpendicular components.
 
-    pca = PCA(n_components=n_pcs)
-    training_data_pc = pca.fit_transform(training_data)
-    print("Components reduced from {} to {}.".format(training_data.shape[1], pca.n_components_))
+    Args:
+        altitudes (ndarray): Height levels in meters.
+        wind_prl (ndarray): Parallel wind speed components for each cluster.
+        wind_prp (ndarray): Perpendicular wind speed components for each cluster.
+        wind_mag (ndarray): Wind speed magnitudes. Defaults to None.
+        n_rows (int): Number of rows in the plot grid. Defaults to 2.
+        savePlots (bool): If True, save the plot as PDF. Defaults to False.
 
-    cluster_model = KMeans(n_clusters=n_clusters, random_state=0).fit(training_data_pc)
-
-    mean_inertia_fit = cluster_model.inertia_/n_samples
-    mean_distance = mean_inertia_fit**.5
-    print("Mean distance: {:.3f}".format(mean_distance))
-
-    # Determine how much samples belong to each cluster.
-    freq = np.zeros(n_clusters)
-    for l in cluster_model.labels_:  # Labels: Index of the cluster each sample belongs to.
-        freq[l] += 100. / n_samples
-
-    # By default order the clusters on their size.
-    plot_order = np.array(sorted(range(n_clusters), key=freq.__getitem__, reverse=True))
-    if reorder:
-        plot_order = plot_order[reorder]
-    clusters_pc = cluster_model.cluster_centers_[plot_order, :]
-    freq = freq[plot_order]
-    labels = np.zeros(n_samples).astype(int)
-    for i_new, i_old in enumerate(plot_order):
-        labels[cluster_model.labels_ == i_old] = i_new
-
-    # Retrieve the mean cluster shapes in original coordinate system.
-    clusters_feature = pca.inverse_transform(clusters_pc)
-    n_altitudes = training_data.shape[1]//2
-
-    res = {
-        'clusters_pc': clusters_pc,
-        'clusters_feature': {
-            'parallel': clusters_feature[:, :n_altitudes],
-            'perpendicular': clusters_feature[:, n_altitudes:]
-        },
-        'frequency_clusters': freq,
-        'sample_labels': labels,
-        'fit_inertia': cluster_model.inertia_,
-        'data_processing_pipeline': make_pipeline(pca, cluster_model),
-        'pca': pca,
-        'training_data_pc': training_data_pc,
-        'cluster_mapping': plot_order,
-        'pc_explained_variance': pca.explained_variance_,
-    }
-    return res
-
-
-def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_rows=2):
+    Returns:
+        None: Displays the plot.
+    """
     n_profiles = len(wind_prl)
     x_label0 = r"$\tilde{v}$ [-]"
     x_label1 = r"$\tilde{v}_{\parallel}$ [-]"
@@ -87,7 +55,7 @@ def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_row
         j = i//n_cols*2
         ax[j, k].plot(prl, altitudes, label="Parallel", color='#ff7f0e')
         ax[j, k].plot(prp, altitudes, label="Perpendicular", color='#1f77b4')
-        ax[0, 0].get_shared_y_axes().join(ax[0, 0], ax[j, k])
+        ax[j, k].sharey(ax[0, 0])
 
         wind_dir = []
         for v_prl, v_prp in zip(wind_prl[i, :], wind_prp[i, :]):
@@ -116,9 +84,26 @@ def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_row
 
     ax[0, 0].legend(bbox_to_anchor=(-1.5+n_cols*.5, 1.05, 3.+wspace*(n_cols-1), 0.2), loc="lower left", mode="expand",
                     borderaxespad=0, ncol=4)
+    
+    if savePlots:
+        fig.savefig('results/wind_profile_shapes.pdf', bbox_inches='tight')
+        print("Saved: results/wind_profile_shapes.pdf")
 
 
 def plot_bars(array2d, bars_labels=None, ax=None, legend_title="", xticklabels=None):
+    """
+    Plot bar charts for comparing cluster properties.
+
+    Args:
+        array2d (ndarray): 2D array with bars to plot (n_bars x n_cols).
+        bars_labels (list): Labels for each bar series. Defaults to None.
+        ax (matplotlib.axes.Axes): Axes to plot on. Defaults to None.
+        legend_title (str): Title for the legend. Defaults to "".
+        xticklabels (list): Labels for x-axis ticks. Defaults to None.
+
+    Returns:
+        None: Modifies the axes or creates a new plot.
+    """
     n_bars = array2d.shape[0]
     n_cols = array2d.shape[1]
     plot_legend = True
@@ -148,7 +133,30 @@ def plot_bars(array2d, bars_labels=None, ax=None, legend_title="", xticklabels=N
         ax.set_xticklabels(xticklabels)
 
 
-def visualise_patterns(n_clusters, wind_data, sample_labels, frequency_clusters):
+def visualise_patterns(n_clusters, wind_data, sample_labels, frequency_clusters, savePlots=False):
+    """Visualize temporal and meteorological patterns of clusters.
+
+    Creates bar plots showing cluster frequency distributions across:
+    - Years
+    - Months
+    - Hours of day
+    - Wind speed bins
+    - Wind direction bins
+
+    Args:
+        n_clusters (int): Number of clusters.
+        wind_data (dict): Dictionary containing wind data with keys:
+            - reference_vector_speed: Wind speed at reference height.
+            - years: Tuple of (start_year, end_year).
+            - datetime: Array of datetime64 objects.
+            - reference_vector_direction: Wind direction in radians.
+        sample_labels (ndarray): Cluster labels for each sample.
+        frequency_clusters (ndarray): Overall frequency of each cluster.
+        savePlots (bool): If True, save the plot as PDF. Defaults to False.
+
+    Returns:
+        None: Displays the plot.
+    """
     wind_speed_100m = wind_data['reference_vector_speed']
     n_samples = len(wind_speed_100m)
 
@@ -275,9 +283,26 @@ def visualise_patterns(n_clusters, wind_data, sample_labels, frequency_clusters)
 
     plot_bars(freq2d_wind_dir_bin, wind_dir_bin_lbls, ax=ax_bars[4], legend_title="Upwind direction 100 m bins")
     ax_bars[4].set_ylabel("Within-cluster\nfrequency [%]")
+    
+    if savePlots:
+        fig_bars.savefig('results/cluster_patterns.pdf', bbox_inches='tight')
+        print("Saved: results/cluster_patterns.pdf")
 
 
-def projection_plot_of_clusters(training_data_reduced, labels, clusters_pc):
+def projection_plot_of_clusters(training_data_reduced, labels, clusters_pc, savePlots=False):
+    """Plot scatter plot of data projected onto first two principal components.
+
+    Shows the distribution of samples in PC space with cluster centers marked.
+
+    Args:
+        training_data_reduced (ndarray): Training data in PC space.
+        labels (ndarray): Cluster labels for each sample.
+        clusters_pc (ndarray): Cluster centers in PC space.
+        savePlots (bool): If True, save the plot as PDF. Defaults to False.
+
+    Returns:
+        None: Displays the plot.
+    """
     plt.figure(figsize=(4.2, 2.5))
     plt.subplots_adjust(top=0.975, bottom=0.178, left=0.18, right=0.94)
     if len(labels) > 5e4:
@@ -305,46 +330,54 @@ def projection_plot_of_clusters(training_data_reduced, labels, clusters_pc):
 
     plt.xlabel('PC1')
     plt.ylabel('PC2')
+    
+    if savePlots:
+        plt.savefig('results/pc_projection.pdf', bbox_inches='tight')
+        print("Saved: results/pc_projection.pdf")
 
 
-def predict_cluster(training_data, n_clusters, predict_fun, cluster_mapping):
-    n_samples = len(training_data)
-    labels_unarranged = predict_fun(training_data)
-    labels = np.zeros(n_samples).astype(int)
-    for i_new, i_old in enumerate(cluster_mapping):
-        labels[labels_unarranged == i_old] = i_new
+def plot_all_results(processed_data, res, processed_data_full, labels_full, frequency_clusters_full, n_clusters, savePlots=False):
+    """Create all plots for clustering results.
 
-    # Determine how much samples belong to each cluster.
-    frequency_clusters = np.zeros(n_clusters)
-    for l in labels:  # Labels: Index of the cluster each sample belongs to.
-        frequency_clusters[l] += 100. / n_samples
+    This is a convenience function that creates all standard visualizations:
+    - Wind profile shapes
+    - Pattern visualization (temporal and meteorological distributions)
+    - PC projection scatter plot
+    - Cluster frequency comparison (filtered vs full dataset)
 
-    return labels, frequency_clusters
+    Args:
+        processed_data (dict): Preprocessed wind data (filtered).
+        res (dict): Clustering results dictionary.
+        processed_data_full (dict): Preprocessed wind data (full dataset).
+        labels_full (ndarray): Cluster labels for full dataset.
+        frequency_clusters_full (ndarray): Cluster frequencies for full dataset.
+        n_clusters (int): Number of clusters.
+        savePlots (bool): If True, save all plots as PDF files. Defaults to False.
 
-
-if __name__ == '__main__':
-    from read_data.fgw_lidar import read_data
-    data = read_data()
-    # from read_data.dowa import read_data
-    # data = read_data({'name': 'mmij'})
-    from preprocess_data import preprocess_data
-    processed_data = preprocess_data(data)
-    n_clusters = 8
-    res = cluster_normalized_wind_profiles_pca(processed_data['training_data'], n_clusters)
+    Returns:
+        None: Displays all plots.
+    """
     prl, prp = res['clusters_feature']['parallel'], res['clusters_feature']['perpendicular']
-    plot_wind_profile_shapes(processed_data['altitude'], prl, prp, (prl ** 2 + prp ** 2) ** .5)
-    visualise_patterns(n_clusters, processed_data, res['sample_labels'], res['frequency_clusters'])
-    projection_plot_of_clusters(res['training_data_pc'], res['sample_labels'], res['clusters_pc'])
-
-    processed_data_full = preprocess_data(data, remove_low_wind_samples=False)
-    labels, frequency_clusters = predict_cluster(processed_data_full['training_data'], n_clusters,
-                                                 res['data_processing_pipeline'].predict, res['cluster_mapping'])
+    
+    # Plot wind profile shapes
+    plot_wind_profile_shapes(processed_data['altitude'], prl, prp, (prl ** 2 + prp ** 2) ** .5, savePlots=savePlots)
+    
+    # Visualize patterns
+    visualise_patterns(n_clusters, processed_data, res['sample_labels'], res['frequency_clusters'], savePlots=savePlots)
+    
+    # Plot PC projection
+    projection_plot_of_clusters(res['training_data_pc'], res['sample_labels'], res['clusters_pc'], savePlots=savePlots)
+    
+    # Compare cluster frequencies
     fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
     plt.subplots_adjust(top=.9, hspace=.3)
     ax[0].set_title('Filtered dataset')
     plot_bars(res['frequency_clusters'].reshape((1, -1)), ax=ax[0], xticklabels=range(1, n_clusters+1))
     ax[1].set_title('Full dataset')
-    plot_bars(frequency_clusters.reshape((1, -1)), ax=ax[1], xticklabels=range(1, n_clusters+1))
-    for a in ax: a.set_ylabel('Cluster frequency [%]')
-    # visualise_patterns(n_clusters, processed_data_full, labels)
-    plt.show()
+    plot_bars(frequency_clusters_full.reshape((1, -1)), ax=ax[1], xticklabels=range(1, n_clusters+1))
+    for a in ax:
+        a.set_ylabel('Cluster frequency [%]')
+    
+    if savePlots:
+        fig.savefig('results/cluster_frequencies_comparison.pdf', bbox_inches='tight')
+        print("Saved: results/cluster_frequencies_comparison.pdf")
