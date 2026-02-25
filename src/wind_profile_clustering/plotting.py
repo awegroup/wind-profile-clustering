@@ -40,7 +40,7 @@ def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_row
     height_ratios = np.ones(2*n_rows)
     for j in range(n_rows):
         height_ratios[2*j] = 1.8
-    fig, ax = plt.subplots(2*n_rows, n_cols, figsize=figsize, sharex=True, gridspec_kw={'height_ratios': height_ratios})
+    fig, ax = plt.subplots(2*n_rows, n_cols, figsize=figsize, sharex=True, gridspec_kw={'height_ratios': height_ratios}, squeeze=False)
     wspace = 0.2
     plt.subplots_adjust(top=0.955, bottom=0.05, left=0.08, right=0.98, hspace=0.2, wspace=wspace)
 
