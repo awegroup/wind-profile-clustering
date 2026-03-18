@@ -23,7 +23,7 @@ STANDARD_GRAVITY = 9.80665  # m/s²
 R_D = 287.058  # Specific gas constant for dry air [J/(kg·K)]
 
 # Altitude calculation method control
-# When True, always use Method 3 (approximate altitudes)
+# When True, always use Method 2 (approximate altitudes)
 # When False, automatically determine the best method based on available data
 FORCE_APPROXIMATE_ALTITUDES = True
 
@@ -171,40 +171,10 @@ L137_COEFFICIENTS = [
     (137, 0.000000, 1.000000),
 ]
 
-def method1_geopotential_altitudes(dsSelected, levels, targetAltitudes):
-    """Calculate altitudes from geopotential data and interpolate at each timestep.
-    
-    Method 1: Uses geopotential field data directly from ERA5.
-    
-    Args:
-        dsSelected (xarray.Dataset): Location-selected xarray Dataset.
-        levels (array): Model level numbers.
-        targetAltitudes (array): Target altitude levels for interpolation [m].
-
-    Returns:
-        tuple: (windEast, windNorth, altitudes) interpolated to target altitudes.
-    """
-    print("Using Method 1: Geopotential-based altitude calculation")
-    
-    # Get geopotential and wind data
-    zData = dsSelected['geopotential'] if 'geopotential' in dsSelected else dsSelected['z']
-    uData = dsSelected['u_component_of_wind'] if 'u_component_of_wind' in dsSelected else dsSelected['u']
-    vData = dsSelected['v_component_of_wind'] if 'v_component_of_wind' in dsSelected else dsSelected['v']
-    
-    # Calculate altitudes at each timestep
-    altitudesTimeVarying = zData.values / STANDARD_GRAVITY  # (time, level)
-    
-    # Interpolate wind data to target altitudes at each timestep
-    windEastInterp = interpolate_profiles(uData.values, altitudesTimeVarying, targetAltitudes)
-    windNorthInterp = interpolate_profiles(vData.values, altitudesTimeVarying, targetAltitudes)
-    
-    return windEastInterp, windNorthInterp, targetAltitudes
-
-
-def method2_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, sfcFilePath, location):
+def method1_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, sfcFilePath, location):
     """Calculate altitudes from temperature/humidity data using hydrostatic equation.
     
-    Method 2: Uses temperature, humidity, and surface pressure data.
+    Method 1: Uses temperature, humidity, and surface pressure data.
     
     Args:
         dsSelected (xarray.Dataset): Location-selected xarray Dataset.
@@ -216,7 +186,7 @@ def method2_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, 
     Returns:
         tuple: (windEast, windNorth, altitudes) interpolated to target altitudes.
     """
-    print("Using Method 2: Temperature/humidity-based altitude calculation")
+    print("Using Method 1: Temperature/humidity-based altitude calculation")
     
     # Get required data
     tData = dsSelected['temperature'] if 'temperature' in dsSelected else dsSelected['t']
@@ -274,10 +244,10 @@ def method2_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, 
     return windEastInterp, windNorthInterp, targetAltitudes
 
 
-def method3_approximate_altitudes(dsSelected, levels, targetAltitudes):
+def method2_approximate_altitudes(dsSelected, levels, targetAltitudes):
     """Use approximate altitudes from lookup table and interpolate.
     
-    Method 3: Uses predefined model-level-to-altitude mapping based on standard atmosphere.
+    Method 2: Uses predefined model-level-to-altitude mapping based on standard atmosphere.
     
     Args:
         dsSelected (xarray.Dataset): Location-selected xarray Dataset.
@@ -287,7 +257,7 @@ def method3_approximate_altitudes(dsSelected, levels, targetAltitudes):
     Returns:
         tuple: (windEast, windNorth, altitudes) interpolated to target altitudes.
     """
-    print("Using Method 3: Approximate altitude calculation")
+    print("Using Method 2: Approximate altitude calculation")
     
     # Get wind data
     uData = dsSelected['u_component_of_wind'] if 'u_component_of_wind' in dsSelected else dsSelected['u']
@@ -498,7 +468,7 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetA
             - 'wind_speed_north': North wind component [m/s]
             - 'datetime': Array of datetime values
             - 'altitude': Array of altitude values [m]
-            - 'altitude_method_used': Method used (1, 2, or 3)
+            - 'altitude_method_used': Method used (1 or 2)
             - 'selected_levels': Target altitude levels
     """
     # Input validation
@@ -509,7 +479,6 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetA
     ds = xr.open_dataset(filePath)
     
     # Check data format and available variables
-    hasGeopotential = 'geopotential' in ds or 'z' in ds
     hasTemperature = 'temperature' in ds or 't' in ds
     hasHumidity = 'specific_humidity' in ds or 'q' in ds
     
@@ -533,35 +502,27 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetA
     
     # Choose and apply altitude calculation method
     if FORCE_APPROXIMATE_ALTITUDES:
-        # Method 3: Forced approximate altitudes
-        windEast, windNorth, altitudes = method3_approximate_altitudes(
+        # Method 2: Forced approximate altitudes
+        windEast, windNorth, altitudes = method2_approximate_altitudes(
             dsSelected, levels, targetAltitudes
-        )
-        altitudeMethodUsed = 3
-        
-    elif hasGeopotential:
-        # Method 1: Geopotential data available
-        windEast, windNorth, altitudes = method1_geopotential_altitudes(
-            dsSelected, levels, targetAltitudes
-        )
-        altitudeMethodUsed = 1
-        
-    elif hasTemperature and hasHumidity:
-        # Method 2: Temperature and humidity available
-        if sfcFilePath is None:
-            raise ValueError("Surface data file path required for Method 2 (temperature/humidity)")
-        
-        windEast, windNorth, altitudes = method2_temperature_humidity_altitudes(
-            dsSelected, levels, targetAltitudes, sfcFilePath, location
         )
         altitudeMethodUsed = 2
+        
+    elif hasTemperature and hasHumidity:
+        # Method 1: Temperature and humidity available
+        if sfcFilePath is None:
+            raise ValueError("Surface data file path required for Method 1 (temperature/humidity)")
+        
+        windEast, windNorth, altitudes = method1_temperature_humidity_altitudes(
+            dsSelected, levels, targetAltitudes, sfcFilePath, location
+        )
+        altitudeMethodUsed = 1
         
     else:
         raise ValueError(
             "Insufficient data for altitude calculation. Need either:\n"
-            "- Geopotential data (Method 1), or\n"
-            "- Temperature + humidity + surface pressure + surface geopotential (Method 2), or\n"
-            "- Set FORCE_APPROXIMATE_ALTITUDES = True (Method 3)"
+            "- Temperature + humidity + surface pressure + surface geopotential (Method 1), or\n"
+            "- Set FORCE_APPROXIMATE_ALTITUDES = True (Method 2)"
         )
     
     # Get time coordinate
@@ -707,11 +668,11 @@ def read_data(config=None):
     
     if methodsUsed:
         uniqueMethods = set(methodsUsed)
-        methodNames = {1: "Geopotential", 2: "Temperature/Humidity", 3: "Approximate"}
+        methodNames = {1: "Temperature/Humidity", 2: "Approximate"}
         methodsStr = ", ".join([f"Method {m} ({methodNames.get(m, 'Unknown')})" for m in sorted(uniqueMethods)])
         print(f"Altitude calculation methods used: {methodsStr}")
     else:
-        uniqueMethods = {3}  # Default to Method 3 if no methods recorded
+        uniqueMethods = {2}  # Default to Method 2 if no methods recorded
     
     print(f"Total samples: {nSamples}")
     print(f"Altitude range: {altitude.min():.1f} - {altitude.max():.1f} m")
