@@ -129,6 +129,7 @@ def main():
         'description': DESCRIPTION,
         'note': note,
         'data_source': 'prescribed_analytical',
+        'altitude_range': [float(ALT_MIN), float(ALT_MAX)],
     }
 
     # Export to YAML — use windDirectionBinWidth=360 for a single omnidirectional bin

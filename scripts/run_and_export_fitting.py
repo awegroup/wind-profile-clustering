@@ -35,7 +35,7 @@ def main():
     # =============================================================================
     # USER CONFIGURATION
     # =============================================================================
-    PROFILE_TYPE = 'power_law'  # 'logarithmic' or 'power_law'
+    PROFILE_TYPE = 'logarithmic'  # 'logarithmic' or 'power_law'
     REF_HEIGHT = 200.0            # Reference height for normalisation [m]
     AWESIO_VALIDATE = True
 
