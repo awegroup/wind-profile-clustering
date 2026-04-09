@@ -35,6 +35,7 @@ def main():
     N_CLUSTERS = 8  # Number of clusters to create
     SAVE_PLOTS = True  # Save plots as PDF files in results/ directory
     REF_HEIGHT = 200.0  # Reference height for profile normalization (in meters)
+    AWESIO_VALIDATE = True
     
     # =============================================================================
     # DATA SOURCE CONFIGURATION
@@ -60,13 +61,16 @@ def main():
             'data_dir': 'data/era5',
             'location': {'latitude': 52.0, 'longitude': 4.0},  # Netherlands
             'altitude_range': (10, 500),  # 10-500m above ground
-            'years': (2011, 2017)  # Years to include
+            'years': (2011, 2011)  # Years to include
         }
         data = read_data(config)
         outPrefix = 'era5'
         
         # Prepare metadata for ERA5
         metadata = {
+            'name': 'ERA5 Wind Profile Clustering',
+            'description': 'Wind profile clustering results derived from ERA5 reanalysis data',
+            'note': 'ERA5 reanalysis data processed for wind profile clustering analysis',
             'data_source': 'ERA5',
             'location': {
                 'latitude': config['location']['latitude'],
@@ -78,8 +82,7 @@ def main():
                 'years_included': list(range(config['years'][0], config['years'][1] + 1)),
                 'months_included': 'all'
             },
-            'altitude_range_m': list(config['altitude_range']),
-            'note': 'ERA5 reanalysis data processed for wind profile clustering analysis'
+            'altitude_range': list(config['altitude_range'])
         }
         
     elif DATA_SOURCE == 'fgw_lidar':
@@ -94,6 +97,9 @@ def main():
         
         # Prepare metadata for FGW lidar
         metadata = {
+            'name': 'FGW Lidar Wind Profile Clustering',
+            'description': 'Wind profile clustering results derived from FGW lidar measurements',
+            'note': 'FGW lidar measurement data',
             'data_source': 'FGW_Lidar',
             'location': {
                 'latitude': None,  # Update with actual coordinates if available
@@ -104,8 +110,7 @@ def main():
                 'end_year': data['years'][1],
                 'years_included': [],
                 'months_included': 'varies'
-            },
-            'note': 'FGW lidar measurement data'
+            }           
         }
         
     elif DATA_SOURCE == 'dowa':
@@ -124,6 +129,9 @@ def main():
         
         # Prepare metadata for DOWA
         metadata = {
+            'name': 'DOWA Wind Profile Clustering',
+            'description': 'Wind profile clustering results derived from DOWA model data',
+            'note': 'DOWA model data from Maasvlakte Meetmast IJmond location',
             'data_source': 'DOWA',
             'location': {
                 'latitude': None,  # Update with actual coordinates if available
@@ -134,8 +142,7 @@ def main():
                 'end_year': data['years'][1],
                 'years_included': [],
                 'months_included': 'varies'
-            },
-            'note': 'DOWA model data from Maasvlakte Meetmast IJmond location'
+            },            
         }
         
     else:
@@ -159,15 +166,15 @@ def main():
     
     # Create all plots
     print("\nGenerating visualizations...")
-    plot_all_results(processedData, res, processedDataFull, labelsFull, 
-                    frequencyClusters, N_CLUSTERS, savePlots=SAVE_PLOTS)
+    # plot_all_results(processedData, res, processedDataFull, labelsFull, 
+    #                 frequencyClusters, N_CLUSTERS, savePlots=SAVE_PLOTS)
     
     # Export to YAML
     print("\nExporting results to YAML...")
     outputFile = f'results/wind_profiles_and_probabilities_{outPrefix}.yml'
     prl = res['clusters_feature']['parallel']
     prp = res['clusters_feature']['perpendicular']
-    
+
     probMatrix = export_wind_profile_shapes_and_probabilities(
         data['altitude'], 
         prl, 
@@ -179,14 +186,9 @@ def main():
         N_CLUSTERS, 
         outputFile, 
         metadata=metadata,
-        refHeight=REF_HEIGHT
+        refHeight=REF_HEIGHT,
+        validate=AWESIO_VALIDATE
     )
-    
-    print(f"\nExported wind profiles and probabilities to: {outputFile}")
-    print(f"Probability matrix shape: {probMatrix.shape}")
-    print(f"Total probability sum: {np.sum(probMatrix):.2f}%")
-    print(f"Total probability per cluster: {np.sum(probMatrix, axis=(1,2))}")
-    
     plt.show()
 
 

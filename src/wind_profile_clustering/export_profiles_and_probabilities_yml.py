@@ -6,15 +6,27 @@
 - Probability distributions of wind speeds for each cluster.
 """
 
+import importlib.metadata
+
 import numpy as np
 import yaml
 from datetime import datetime
 
 
+def _get_awesio_version():
+    """Return the installed awesio package version, or 'unknown' if not available."""
+    try:
+        return importlib.metadata.version('awesio')
+    except importlib.metadata.PackageNotFoundError:
+        print("Warning: awesio package not found. Version will be set to 'unknown' in metadata.")
+        return 'unknown'
+
+
 def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, normalisationWindSpeeds,
                                                 windDirections, nSamples, nClusters, outputFile,
                                                 refHeight=100., nWindSpeedBins=50,
-                                                windDirectionBinWidth=36., metadata=None):
+                                                windDirectionBinWidth=36., metadata=None,
+                                                validate=False):
     """Export wind profiles and their probability distributions to YAML file.
 
     Args:
@@ -30,8 +42,10 @@ def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, 
         refHeight (float): Reference height for scale factor calculation. Defaults to 100.0.
         nWindSpeedBins (int): Number of wind speed bins for probability matrix. Defaults to 50.
         windDirectionBinWidth (float): Width of wind direction bins in degrees. Defaults to 36.0.
-        metadata (dict): Additional metadata dictionary containing location, time range, data source, etc.
-            Defaults to None.
+        metadata (dict): Metadata dictionary containing location, time range, data source, etc.
+            Must include 'name', 'description', 'note', and 'data_source'. 'awesIO_version' is
+            always determined from the installed package and must not be included.
+        validate (bool): Validate the exported YAML using awesio.validator. Defaults to False.
 
     Returns:
         np.ndarray: Probability matrix with shape (nClusters, nWindSpeedBins, nWindDirectionBins).
@@ -61,7 +75,6 @@ def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, 
 
         profile = {
             'id': i+1,
-            'height_m': list(map(float, heights)),
             'u_normalized': list(map(float, uScaled)),
             'v_normalized': list(map(float, vScaled))
         }
@@ -102,34 +115,47 @@ def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, 
         # Convert to probabilities (percentage of total samples)
         probabilityMatrix[iCluster, :, :] = hist / nSamples * 100.0
 
-    # Prepare data for YAML export
-    baseMetadata = {
+    # Validate and merge caller-supplied metadata
+    if metadata is None:
+        raise ValueError("metadata must be provided")
+    for required_key in ('name', 'description', 'note', 'data_source'):
+        if required_key not in metadata:
+            raise ValueError(f"metadata is missing required key: '{required_key}'")
+
+
+    # Prepare data for YAML export — start with computed fields
+    metadatadict = {
+        'name': metadata['name'],
+        'description': metadata['description'],
+        'note': metadata['note'],
+        'awesIO_version': _get_awesio_version(),
+        'schema': 'wind_resource_schema.yml',
+        'data_source': metadata['data_source'],
+        'time_created': datetime.now().isoformat(),
+        'location': metadata.get('location',{}),
+        'time_range': metadata.get('time_range',{}),
+        'altitude_range': metadata.get('altitude_range', []),
         'n_clusters': nClusters,
         'n_wind_speed_bins': nWindSpeedBins,
         'n_wind_direction_bins': nWindDirectionBins,
-        'wind_direction_bin_width_deg': windDirectionBinWidth,
-        'reference_height_m': refHeight,
+        'wind_direction_bin_width': windDirectionBinWidth,
+        'reference_height': refHeight,
         'total_samples': nSamples,
-        'wind_speed_range_m_s': [float(minWindSpeed), float(maxWindSpeed)]
+        'wind_speed_range': [float(minWindSpeed), float(maxWindSpeed)]
     }
 
-    # Add additional metadata if provided
-    if metadata is not None:
-        baseMetadata.update(metadata)
 
-    # Add timestamp
-    baseMetadata['time_created'] = datetime.now().isoformat()
 
     ymlData = {
-        'metadata': baseMetadata,
+        'metadata': metadatadict,
         'altitudes': list(map(float, heights)),
         'wind_speed_bins': {
-            'bin_edges_m_s': list(map(float, windSpeedBins)),
-            'bin_centers_m_s': list(map(float, (windSpeedBins[:-1] + windSpeedBins[1:]) / 2))
+            'bin_edges': list(map(float, windSpeedBins)),
+            'bin_centers': list(map(float, (windSpeedBins[:-1] + windSpeedBins[1:]) / 2))
         },
         'wind_direction_bins': {
-            'bin_edges_deg': list(map(float, windDirectionBins)),
-            'bin_centers_deg': list(map(float, (windDirectionBins[:-1] + windDirectionBins[1:]) / 2))
+            'bin_edges': list(map(float, windDirectionBins)),
+            'bin_centers': list(map(float, (windDirectionBins[:-1] + windDirectionBins[1:]) / 2))
         },
         'clusters': [
             {
@@ -148,5 +174,11 @@ def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, 
     # Export to YAML
     with open(outputFile, 'w') as f:
         yaml.dump(ymlData, f, sort_keys=False, default_flow_style=False)
+
+    # Validate exported YAML using awesio validator if requested
+    if validate:
+        from awesio.validator import validate as awesio_validate
+        awesio_validate(outputFile)
+        print("Schema validation passed.")
 
     return probabilityMatrix
