@@ -166,8 +166,8 @@ def main():
     
     # Create all plots
     print("\nGenerating visualizations...")
-    # plot_all_results(processedData, res, processedDataFull, labelsFull, 
-    #                 frequencyClusters, N_CLUSTERS, savePlots=SAVE_PLOTS)
+    plot_all_results(processedData, res, processedDataFull, labelsFull, 
+                    frequencyClusters, N_CLUSTERS, savePlots=SAVE_PLOTS)
     
     # Export to YAML
     print("\nExporting results to YAML...")

@@ -579,8 +579,8 @@ def read_data(config=None):
     if config is None:
         config = {}
 
-
-    dataDir = Path(config.get('data_dir'))
+    defaultDataDir = Path(__file__).parent.parent.parent.parent / 'data' / 'era5'
+    dataDir = Path(config.get('data_dir', defaultDataDir))
     location = config.get('location', None)
     altitudeRange = config.get('altitude_range', (0, 1000))
     years = config.get('years', None)
@@ -692,7 +692,7 @@ def read_data(config=None):
 
 if __name__ == '__main__':
     # Example usage
-    print("Reading ERA5 data for wind profile clustering...")
+    print("Reading ERA5 data...")
     
     # Read data for a specific location and altitude range
     config = {
