@@ -77,10 +77,8 @@ def main():
                 'longitude': config['location']['longitude']
             },
             'time_range': {
-                'start_year': config['years'][0],
-                'end_year': config['years'][1],
-                'years_included': list(range(config['years'][0], config['years'][1] + 1)),
-                'months_included': 'all'
+                'start_data': str(data['datetime'][0].astype('datetime64[D]')),
+                'end_data': str(data['datetime'][-1].astype('datetime64[D]')),
             },
             'altitude_range': list(config['altitude_range'])
         }
@@ -106,10 +104,8 @@ def main():
                 'longitude': None
             },
             'time_range': {
-                'start_year': data['years'][0],
-                'end_year': data['years'][1],
-                'years_included': [],
-                'months_included': 'varies'
+                'start_data': str(data['datetime'][0].astype('datetime64[D]')),
+                'end_data': str(data['datetime'][-1].astype('datetime64[D]')),
             }           
         }
         
@@ -138,10 +134,8 @@ def main():
                 'longitude': None
             },
             'time_range': {
-                'start_year': data['years'][0],
-                'end_year': data['years'][1],
-                'years_included': [],
-                'months_included': 'varies'
+                'start_data': str(data['datetime'][0].astype('datetime64[D]')),
+                'end_data': str(data['datetime'][-1].astype('datetime64[D]')),
             },            
         }
         
