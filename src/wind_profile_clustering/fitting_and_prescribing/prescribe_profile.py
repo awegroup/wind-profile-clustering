@@ -18,7 +18,6 @@ from scipy.special import gamma
 from wind_profile_clustering.fitting_and_prescribing.fit_profile import (
     _log_profile_func,
     _power_law_func,
-    KARMAN_CONSTANT,
 )
 
 

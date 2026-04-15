@@ -48,7 +48,7 @@ Repository = "https://github.com/awegroup/wind-profile-clustering"
 Documentation = "https://github.com/awegroup/wind-profile-clustering#readme"
 
 [tool.setuptools]
-packages = ["wind_profile_clustering", "wind_profile_clustering.read_data"]
+packages = ["wind_profile_clustering", "wind_profile_clustering.read_data", "wind_profile_clustering.fitting_and_prescribing"]
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]

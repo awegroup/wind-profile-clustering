@@ -196,7 +196,7 @@ def method1_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, 
     
     # Get surface pressure
     if not Path(sfcFilePath).exists():
-        raise FileNotFoundError(f"Surface data file required for Method 2: {sfcFilePath}")
+        raise FileNotFoundError(f"Surface data file required for Method 1: {sfcFilePath}")
         
     dsSfc = xr.open_dataset(sfcFilePath)
     dsSfcSel = dsSfc.interp(latitude=location['latitude'], longitude=location['longitude'], method='linear')
@@ -220,7 +220,7 @@ def method1_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, 
     # Get surface geopotential
     geopotentialFile = Path(sfcFilePath).parent / 'era5_geopotential.netcdf'
     if not geopotentialFile.exists():
-        raise FileNotFoundError(f"Surface geopotential file required for Method 2: {geopotentialFile}")
+        raise FileNotFoundError(f"Surface geopotential file required for Method 1: {geopotentialFile}")
         
     dsGeo = xr.open_dataset(geopotentialFile)
     dsGeoSel = dsGeo.interp(latitude=location['latitude'], longitude=location['longitude'], method='linear')
@@ -355,7 +355,8 @@ atic equation.
         # Avoid div by zero if pUpper is 0 (top of atmosphere)
         if lvl == 1 or np.any(pUpper <= 0):
             # Top layer or zero pressure: use approximation
-            dPhi = R_D * tvLayer * 10.0  # Small layer thickness        else:
+            dPhi = R_D * tvLayer * 10.0  # Small layer thickness        
+        else:
             dPhi = R_D * tvLayer * np.log(pLower / pUpper)
              
         # Geopotential at upper interface
