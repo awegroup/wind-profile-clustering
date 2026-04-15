@@ -8,35 +8,44 @@ Afterwards, functionality to read and use ERA5 data has been added. ERA5 provide
 
 All results are exported in the [awesIO](https://github.com/awegroup/awesIO) wind resource format, a standardised YAML format for wind resource data used in airborne wind energy research. In addition to the clustering workflow, the repository also provides functionality to fit logarithmic or power law profiles to wind data, and to prescribe analytical profiles entirely without measured data.
 
-## Installing the environment and running the code
+## Installation Instructions
 
-The code is tested with Python 3.9 or higher. 
+1. Clone the repository:
+    ```bash
+    git clone https://github.com/awegroup/wind-profile-clustering.git
+    cd wind-profile-clustering
+    ```
 
-### Installation with Conda (Recommended)
+2. Create and activate a virtual environment:
 
-Create and activate a new conda environment:
+    Linux / macOS:
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
 
-```bash
-conda create --name wind_clustering python=3.9
-conda activate wind_clustering
-```
+    Windows (PowerShell):
+    ```bash
+    python -m venv venv
+    .\venv\Scripts\Activate
+    ```
 
-Install the package and its dependencies:
+3. Install the package:
 
-```bash
-pip install -e .
-```
+    For users (run the example scripts):
+    ```bash
+    pip install .
+    ```
 
-### Installation with pip only
+    For developers (editable install with dev tools):
+    ```bash
+    pip install -e .[dev]
+    ```
 
-If you're not using conda, install directly with pip:
-
-```bash
-pip install -e .
-```
-
-The `-e` flag installs the package in editable mode, allowing you to modify the code without reinstalling.
-
+4. To deactivate the virtual environment when you are done:
+    ```bash
+    deactivate
+    ```
 ### Data Setup
 
 The scripts automatically look for data in their respective folders within the `data/` directory:
@@ -45,6 +54,8 @@ The scripts automatically look for data in their respective folders within the `
 - **FGW lidar data**: Place raw `.rtd` files or the downsampled CSV in `data/fgw_lidar/`
 
 For DOWA data, download the [time series files from 2008-2017 at 10-600 meter height](https://dataplatform.knmi.nl/catalog/datasets/index.html?x-dataset=dowa_netcdf_ts_singlepoint&x-dataset-version=1) for your desired grid location.
+
+For ERA5 data, take a look at the following repo that explains how to download ERA5 data using the CDS API: https://github.com/awegroup/awe-era5. It also mentions a pre-downloaded ERA5 dataset from 2011-2017 covering Europe.
 
 ### Running the Clustering Analysis
 

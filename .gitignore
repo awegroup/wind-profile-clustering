@@ -9,3 +9,9 @@ __pycache__/
 # Ignore .yml results files
 results/*.yml
 results/wind_profiles_and_probabilities_era5.yml
+
+# Ignore build
+build/
+
+*.egg-info/
+dist/
