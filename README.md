@@ -4,37 +4,48 @@ This repository contains the Python code for analysing vertical wind profile pat
 
 The code has been originally developed for analysing the Dutch offshore wind atlas (DOWA) dataset. The DOWA file reading functionalities are compatible with the [time series files from 2008-2017 at 10-600 meter height at individual 2,5 km grid location](https://dataplatform.knmi.nl/catalog/datasets/index.html?x-dataset=dowa_netcdf_ts_singlepoint&x-dataset-version=1). Additionally, file reading functionalities are provided for the raw output files of the Leosphere WindCube v.2.1.8 lidar. Measurements of this machine at a location near Köln in Germany for the first three months of 2020 are provided by GWU Umwelttechnik and are under analysis by an airborne wind energy (AWE) resource consortium, which aims for developing AWE system design load case standards. A request to publish the hour-averaged measurement in this repository is pending. 
 
-Afterwards, functionality to read and use ERA5 data has been added. ERA5 provides data on model levels rather than fixed altitude levels, requiring conversion to heights above ground. The code supports three methods for this calculation: (1) direct geopotential-based calculation using geopotential fields from ERA5, providing the most accurate time-varying altitudes; (2) hydrostatic equation calculation using temperature, humidity, and surface pressure data, also accounting for temporal variations; and (3) approximate altitude mapping using a predefined model-level-to-altitude lookup table, which is computationally efficient but assumes standard atmospheric conditions. Method 3 is used by default for simplicity, but methods 1 or 2 can be enabled by downloading the required additional ERA5 variables.
+Afterwards, functionality to read and use ERA5 data has been added. ERA5 provides data on model levels rather than fixed altitude levels, requiring conversion to heights above ground. The code supports two methods for this calculation: (1) hydrostatic equation calculation using temperature, humidity, and surface pressure data, accounting for temporal variations; and (2) approximate altitude mapping using a predefined model-level-to-altitude lookup table, which is computationally efficient but assumes standard atmospheric conditions. Method 2 is used by default for simplicity, but method 1 can be enabled by downloading the required additional ERA5 variables.
 
-## Installing the environment and running the code
+All results are exported in the [awesIO](https://github.com/awegroup/awesIO) wind resource format, a standardised YAML format for wind resource data used in airborne wind energy research. In addition to the clustering workflow, the repository also provides functionality to fit logarithmic or power law profiles to wind data, and to prescribe analytical profiles entirely without measured data.
 
-The code is tested with Python 3.9 or higher. 
+## Installation Instructions
 
-### Installation with Conda (Recommended)
+1. Clone the repository:
+    ```bash
+    git clone https://github.com/awegroup/wind-profile-clustering.git
+    cd wind-profile-clustering
+    ```
 
-Create and activate a new conda environment:
+2. Create and activate a virtual environment:
 
-```bash
-conda create --name wind_clustering python=3.9
-conda activate wind_clustering
-```
+    Linux / macOS:
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
 
-Install the package and its dependencies:
+    Windows (PowerShell):
+    ```bash
+    python -m venv venv
+    .\venv\Scripts\Activate
+    ```
 
-```bash
-pip install -e .
-```
+3. Install the package:
 
-### Installation with pip only
+    For users (run the example scripts):
+    ```bash
+    pip install .
+    ```
 
-If you're not using conda, install directly with pip:
+    For developers (editable install with dev tools):
+    ```bash
+    pip install -e .[dev]
+    ```
 
-```bash
-pip install -e .
-```
-
-The `-e` flag installs the package in editable mode, allowing you to modify the code without reinstalling.
-
+4. To deactivate the virtual environment when you are done:
+    ```bash
+    deactivate
+    ```
 ### Data Setup
 
 The scripts automatically look for data in their respective folders within the `data/` directory:
@@ -43,6 +54,8 @@ The scripts automatically look for data in their respective folders within the `
 - **FGW lidar data**: Place raw `.rtd` files or the downsampled CSV in `data/fgw_lidar/`
 
 For DOWA data, download the [time series files from 2008-2017 at 10-600 meter height](https://dataplatform.knmi.nl/catalog/datasets/index.html?x-dataset=dowa_netcdf_ts_singlepoint&x-dataset-version=1) for your desired grid location.
+
+For ERA5 data, take a look at the following repo that explains how to download ERA5 data using the CDS API: https://github.com/awegroup/awe-era5. It also mentions a pre-downloaded ERA5 dataset from 2011-2017 covering Europe.
 
 ### Running the Clustering Analysis
 
@@ -57,5 +70,37 @@ Run the script:
 python scripts/run_and_export_clustering.py
 ```
 
-This will perform the clustering analysis, generate visualizations, and export results to YAML format in the `results/` directory.
+This will perform the clustering analysis, generate visualizations, and export results to the awesIO wind resource YAML format in the `results/` directory.
+
+### Running the Profile Fitting
+
+Configure the data source and fitting parameters in `scripts/run_and_export_fitting.py`:
+- Set `DATA_SOURCE` to `'era5'`, `'fgw_lidar'`, or `'dowa'`
+- Set `PROFILE_TYPE` to `'logarithmic'` or `'power_law'`
+- Set `REF_HEIGHT` to the reference height for profile normalisation (default: 200 m)
+
+Run the script:
+
+```bash
+python scripts/run_and_export_fitting.py
+```
+
+This fits the chosen profile type to the time-averaged wind speed magnitude from the selected dataset and exports the result to the awesIO wind resource YAML format in the `results/` directory. The wind speed magnitude is computed as $\sqrt{u_{east}^2 + u_{north}^2}$; `u_normalized` contains the fitted profile normalised to 1 at the reference height and `v_normalized` is zero.
+
+### Running the Profile Prescribing
+
+Configure the parameters in `scripts/run_and_export_prescribed.py`:
+- Set `PROFILE_TYPE` to `'logarithmic'` or `'power_law'`
+- Set `REF_HEIGHT`, `ALT_MIN`, `ALT_MAX`, and `ALT_STEP` for the altitude grid
+- Set `MEAN_WIND_SPEED` and `WEIBULL_K` to define the Weibull wind speed distribution
+- For `'logarithmic'`: set `FRICTION_VELOCITY` and `ROUGHNESS_LENGTH`
+- For `'power_law'`: set `ALPHA`
+
+Run the script:
+
+```bash
+python scripts/run_and_export_prescribed.py
+```
+
+This builds a wind resource file entirely from prescribed parameters — no measured wind data is required. The profile shape is computed analytically and the wind speed probability distribution is a Weibull distribution. Results are exported to the awesIO wind resource YAML format in the `results/` directory.
 
