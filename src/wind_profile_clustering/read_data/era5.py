@@ -22,11 +22,6 @@ import re
 STANDARD_GRAVITY = 9.80665  # m/s²
 R_D = 287.058  # Specific gas constant for dry air [J/(kg·K)]
 
-# Altitude calculation method control
-# When True, always use Method 2 (approximate altitudes)
-# When False, automatically determine the best method based on available data
-FORCE_APPROXIMATE_ALTITUDES = False
-
 # ERA5 L137 Model Level Definitions
 # Source: ECMWF https://confluence.ecmwf.int/display/UDOC/L137+model+level+definitions 
 # a coefficients in Pa, b coefficients dimensionless
@@ -171,115 +166,143 @@ L137_COEFFICIENTS = [
     (137, 0.000000, 1.000000),
 ]
 
-def method1_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, sfcFilePath, location):
-    """Calculate altitudes from temperature/humidity data using hydrostatic equation.
-    
-    Method 1: Uses temperature, humidity, and surface pressure data.
-    
+def _bilinear_weights(lats, lons, targetLat, targetLon):
+    """Compute bilinear interpolation weights and indices for 4 surrounding ERA5 grid points.
+
+    Works with both ascending and descending coordinate arrays (ERA5 latitudes are
+    typically stored in descending order from 90 to -90).
+
     Args:
-        dsSelected (xarray.Dataset): Location-selected xarray Dataset.
-        levels (array): Model level numbers.
-        targetAltitudes (array): Target altitude levels for interpolation [m].
-        sfcFilePath (str or Path): Path to surface data file.
-        location (dict): Location dictionary with 'latitude' and 'longitude' keys.
+        lats (ndarray): 1-D latitude coordinate array (any sort order).
+        lons (ndarray): 1-D longitude coordinate array (any sort order).
+        targetLat (float): Target latitude.
+        targetLon (float): Target longitude.
 
     Returns:
-        tuple: (windEast, windNorth, altitudes) interpolated to target altitudes.
+        tuple: (indices, weights) where indices is a list of 4 (latIdx, lonIdx)
+               integer index pairs and weights is a list of 4 bilinear weights
+               that sum to 1.
     """
-    print("Using Method 1: Temperature/humidity-based altitude calculation")
-    
-    # Get required data
-    tData = dsSelected['temperature'] if 'temperature' in dsSelected else dsSelected['t']
-    qData = dsSelected['specific_humidity'] if 'specific_humidity' in dsSelected else dsSelected['q']
-    uData = dsSelected['u_component_of_wind'] if 'u_component_of_wind' in dsSelected else dsSelected['u']
-    vData = dsSelected['v_component_of_wind'] if 'v_component_of_wind' in dsSelected else dsSelected['v']
-    
-    # Get surface pressure
-    if not Path(sfcFilePath).exists():
-        raise FileNotFoundError(f"Surface data file required for Method 1: {sfcFilePath}")
-        
-    dsSfc = xr.open_dataset(sfcFilePath)
-    dsSfcSel = dsSfc.interp(latitude=location['latitude'], longitude=location['longitude'], method='linear')
-    
-    # Match the time selection from dsSelected
-    # Get the time coordinates that were actually selected
-    if hasattr(dsSelected, 'valid_time'):
+    def _surrounding(coords, target):
+        sortOrder = np.argsort(coords)
+        coordsSorted = coords[sortOrder]
+        pos = int(np.searchsorted(coordsSorted, target))
+        idxLo = max(0, pos - 1)
+        idxHi = min(len(coordsSorted) - 1, pos)
+        return int(sortOrder[idxLo]), int(sortOrder[idxHi]), float(coordsSorted[idxLo]), float(coordsSorted[idxHi])
+
+    latIdxLo, latIdxHi, latLo, latHi = _surrounding(lats, targetLat)
+    lonIdxLo, lonIdxHi, lonLo, lonHi = _surrounding(lons, targetLon)
+
+    fLat = 0.0 if latHi == latLo else (targetLat - latLo) / (latHi - latLo)
+    fLon = 0.0 if lonHi == lonLo else (targetLon - lonLo) / (lonHi - lonLo)
+
+    indices = [
+        (latIdxLo, lonIdxLo),
+        (latIdxLo, lonIdxHi),
+        (latIdxHi, lonIdxLo),
+        (latIdxHi, lonIdxHi),
+    ]
+    weights = [
+        (1 - fLat) * (1 - fLon),
+        (1 - fLat) * fLon,
+        fLat * (1 - fLon),
+        fLat * fLon,
+    ]
+    return indices, weights
+
+
+def method1_temperature_humidity_altitudes(dsPoint, levels, targetAltitudes, dsSfcPoint):
+    """Calculate altitudes from temperature/humidity data using hydrostatic equation.
+
+    Method 1: Uses temperature, humidity, and surface pressure data for a single
+    ERA5 grid point. Altitude is computed from the atmospheric state at that exact
+    grid point before wind profiles are interpolated to target altitudes.
+
+    Args:
+        dsPoint (xarray.Dataset): Model-level dataset for a single ERA5 grid point
+            (no latitude/longitude dimensions).
+        levels (xarray.DataArray): Model level numbers.
+        targetAltitudes (ndarray): Target altitude levels for interpolation [m].
+        dsSfcPoint (xarray.Dataset): Surface dataset for the same grid point.
+
+    Returns:
+        tuple: (windEast, windNorth) each of shape (nTime, nTargets).
+    """
+    tData = dsPoint['temperature'] if 'temperature' in dsPoint else dsPoint['t']
+    qData = dsPoint['specific_humidity'] if 'specific_humidity' in dsPoint else dsPoint['q']
+    uData = dsPoint['u_component_of_wind'] if 'u_component_of_wind' in dsPoint else dsPoint['u']
+    vData = dsPoint['v_component_of_wind'] if 'v_component_of_wind' in dsPoint else dsPoint['v']
+
+    # Determine time coordinate name
+    if 'valid_time' in dsPoint.coords:
         timeCoord = 'valid_time'
-        selectedTimes = dsSelected.valid_time
-    elif hasattr(dsSelected, 'time'):
-        timeCoord = 'time' 
-        selectedTimes = dsSelected.time
+        selectedTimes = dsPoint.valid_time
+    elif 'time' in dsPoint.coords:
+        timeCoord = 'time'
+        selectedTimes = dsPoint.time
     else:
-        raise ValueError("Could not find time coordinate in dsSelected")
-        
-    # Select matching times in surface data
-    dsSfcSel = dsSfcSel.sel(**{timeCoord: selectedTimes})
-    sp = dsSfcSel['sp'].values if 'sp' in dsSfcSel else np.exp(dsSfcSel['lnsp'].values)
-    dsSfc.close()
-    
-    # Get surface geopotential from the sfc file (z is included as a static field)
-    if 'z' in dsSfcSel:
-        zSfc = float(dsSfcSel['z'].values.flat[0])
-    elif 'geopotential' in dsSfcSel:
-        zSfc = float(dsSfcSel['geopotential'].values.flat[0])
+        raise ValueError("Could not find time coordinate in dsPoint")
+
+    # Align surface data to the same times and extract surface pressure
+    dsSfcAligned = dsSfcPoint.sel(**{timeCoord: selectedTimes})
+    sp = dsSfcAligned['sp'].values if 'sp' in dsSfcAligned else np.exp(dsSfcAligned['lnsp'].values)
+
+    # Get surface geopotential (static field, same for all timesteps)
+    if 'z' in dsSfcAligned:
+        zSfc = float(dsSfcAligned['z'].values.flat[0])
+    elif 'geopotential' in dsSfcAligned:
+        zSfc = float(dsSfcAligned['geopotential'].values.flat[0])
     else:
         raise ValueError("Surface geopotential 'z' not found in surface data file. "
                          "Expected variable 'z' or 'geopotential'.")
 
     # Calculate altitudes at each timestep using hydrostatic equation
-    # This gives altitudes relative to the surface geopotential
     altitudesRelativeToSurface = calculate_geopotential_from_levels(
         tData.values, qData.values, sp, zSfc, L137_COEFFICIENTS, L137_COEFFICIENTS, levels.values
     )
-    
-    # Convert to altitudes above surface by subtracting the surface altitude
+
+    # Convert to altitudes above surface
     surfaceAltitude = zSfc / STANDARD_GRAVITY
     altitudesTimeVarying = altitudesRelativeToSurface - surfaceAltitude
-    
-    # Interpolate wind data to target altitudes at each timestep
+
     windEastInterp = interpolate_profiles(uData.values, altitudesTimeVarying, targetAltitudes)
     windNorthInterp = interpolate_profiles(vData.values, altitudesTimeVarying, targetAltitudes)
-    
-    return windEastInterp, windNorthInterp, targetAltitudes
+
+    return windEastInterp, windNorthInterp
 
 
-def method2_approximate_altitudes(dsSelected, levels, targetAltitudes):
-    """Use approximate altitudes from lookup table and interpolate.
-    
+def method2_approximate_altitudes(dsPoint, levels, targetAltitudes):
+    """Use approximate altitudes from lookup table for a single ERA5 grid point.
+
     Method 2: Uses predefined model-level-to-altitude mapping based on standard atmosphere.
-    
+
     Args:
-        dsSelected (xarray.Dataset): Location-selected xarray Dataset.
-        levels (array): Model level numbers.
-        targetAltitudes (array): Target altitude levels for interpolation [m].
+        dsPoint (xarray.Dataset): Model-level dataset for a single ERA5 grid point
+            (no latitude/longitude dimensions).
+        levels (xarray.DataArray): Model level numbers.
+        targetAltitudes (ndarray): Target altitude levels for interpolation [m].
 
     Returns:
-        tuple: (windEast, windNorth, altitudes) interpolated to target altitudes.
+        tuple: (windEast, windNorth) each of shape (nTime, nTargets).
     """
-    print("Using Method 2: Approximate altitude calculation")
-    
-    # Get wind data
-    uData = dsSelected['u_component_of_wind'] if 'u_component_of_wind' in dsSelected else dsSelected['u']
-    vData = dsSelected['v_component_of_wind'] if 'v_component_of_wind' in dsSelected else dsSelected['v']
-    
-    # Get approximate altitudes for each level
+    uData = dsPoint['u_component_of_wind'] if 'u_component_of_wind' in dsPoint else dsPoint['u']
+    vData = dsPoint['v_component_of_wind'] if 'v_component_of_wind' in dsPoint else dsPoint['v']
+
     levelAltitudeMap = get_pressure_level_altitudes()
     approxAltitudes = np.array([levelAltitudeMap.get(l, np.nan) for l in levels.values])
-    
-    # Check for missing altitude mappings
+
     if np.any(np.isnan(approxAltitudes)):
         missingLevels = levels.values[np.isnan(approxAltitudes)]
         raise ValueError(f"No approximate altitudes available for levels: {missingLevels}")
-    
-    # Create time-varying altitude array (same for all timesteps)
+
     nTimes = uData.shape[0]
     altitudesTimeVarying = np.tile(approxAltitudes, (nTimes, 1))
-    
-    # Interpolate wind data to target altitudes at each timestep
+
     windEastInterp = interpolate_profiles(uData.values, altitudesTimeVarying, targetAltitudes)
     windNorthInterp = interpolate_profiles(vData.values, altitudesTimeVarying, targetAltitudes)
-    
-    return windEastInterp, windNorthInterp, targetAltitudes
+
+    return windEastInterp, windNorthInterp
 
 
 def calculate_geopotential_from_levels(t, q, sp, zSfc, a, b, levels):
@@ -490,58 +513,90 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetA
     else:
         raise ValueError("No model level coordinate found in dataset")
     
-    # Select location using bilinear interpolation
     latTarget = location['latitude']
     lonTarget = location['longitude']
-    dsSelected = ds.interp(latitude=latTarget, longitude=lonTarget, method='linear')
-    
+
     # Set up target altitudes
     if targetAltitudes is None:
         minAlt, maxAlt = altitudeRange
         targetAltitudes = np.arange(minAlt, maxAlt + 1, 10)
-    
-    # Choose and apply altitude calculation method
-    if FORCE_APPROXIMATE_ALTITUDES:
-        # Method 2: Forced approximate altitudes
-        windEast, windNorth, altitudes = method2_approximate_altitudes(
-            dsSelected, levels, targetAltitudes
-        )
-        altitudeMethodUsed = 2
-        
-    elif hasTemperature and hasHumidity:
-        # Method 1: Temperature and humidity available
+
+    # Identify coordinate names (ERA5 files use 'latitude'/'longitude')
+    latCoord = 'latitude' if 'latitude' in ds.coords else 'lat'
+    lonCoord = 'longitude' if 'longitude' in ds.coords else 'lon'
+    lats = ds[latCoord].values
+    lons = ds[lonCoord].values
+
+    # Find the 4 surrounding ERA5 grid points and compute bilinear weights.
+    # Altitude is calculated separately at each grid point so that the
+    # distance-weighted combination is applied after the (non-linear)
+    # hydrostatic altitude calculation, not before.
+    gridIndices, weights = _bilinear_weights(lats, lons, latTarget, lonTarget)
+
+    # Open surface dataset once, shared across all 4 grid points
+    dsSfc = None
+    if hasTemperature and hasHumidity:
         if sfcFilePath is None:
             raise ValueError("Surface data file path required for Method 1 (temperature/humidity)")
-        
-        windEast, windNorth, altitudes = method1_temperature_humidity_altitudes(
-            dsSelected, levels, targetAltitudes, sfcFilePath, location
-        )
+        if not Path(sfcFilePath).exists():
+            raise FileNotFoundError(f"Surface data file required for Method 1: {sfcFilePath}")
+        dsSfc = xr.open_dataset(sfcFilePath)
+        sfcLatCoord = 'latitude' if 'latitude' in dsSfc.coords else 'lat'
+        sfcLonCoord = 'longitude' if 'longitude' in dsSfc.coords else 'lon'
+        print("Using Method 1: Temperature/humidity-based altitude calculation")
         altitudeMethodUsed = 1
-        
     else:
-        raise ValueError(
-            "Insufficient data for altitude calculation. Need either:\n"
-            "- Temperature + humidity + surface pressure + surface geopotential (Method 1), or\n"
-            "- Set FORCE_APPROXIMATE_ALTITUDES = True (Method 2)"
-        )
-    
-    # Get time coordinate
-    if 'time' in dsSelected:
-        datetimeValues = dsSelected.time.values
-    elif 'valid_time' in dsSelected:
-        datetimeValues = dsSelected.valid_time.values
+        print("Using Method 2: Approximate altitude calculation")
+        altitudeMethodUsed = 2
+
+    # Process each of the 4 surrounding grid points
+    allWindEast = []
+    allWindNorth = []
+    for latIdx, lonIdx in gridIndices:
+        dsPoint = ds.isel(**{latCoord: latIdx, lonCoord: lonIdx})
+
+        if hasTemperature and hasHumidity:
+            # Select the matching grid point from the surface file by coordinate value
+            dsSfcPoint = dsSfc.sel(
+                **{sfcLatCoord: float(lats[latIdx]), sfcLonCoord: float(lons[lonIdx])},
+                method='nearest'
+            )
+            windEast, windNorth = method1_temperature_humidity_altitudes(
+                dsPoint, levels, targetAltitudes, dsSfcPoint
+            )
+        else:
+            windEast, windNorth = method2_approximate_altitudes(
+                dsPoint, levels, targetAltitudes
+            )
+
+        allWindEast.append(windEast)
+        allWindNorth.append(windNorth)
+
+    if dsSfc is not None:
+        dsSfc.close()
+
+    # Combine the 4 wind profiles using bilinear distance weights
+    windEastFinal = sum(w * we for w, we in zip(weights, allWindEast))
+    windNorthFinal = sum(w * wn for w, wn in zip(weights, allWindNorth))
+
+    # Get time coordinate from the first grid point
+    dsFirst = ds.isel(**{latCoord: gridIndices[0][0], lonCoord: gridIndices[0][1]})
+    if 'time' in dsFirst.coords:
+        datetimeValues = dsFirst.time.values
+    elif 'valid_time' in dsFirst.coords:
+        datetimeValues = dsFirst.valid_time.values
     else:
         raise ValueError("No time coordinate found in dataset")
-    
+
     result = {
-        'wind_speed_east': windEast,
-        'wind_speed_north': windNorth,
+        'wind_speed_east': windEastFinal,
+        'wind_speed_north': windNorthFinal,
         'datetime': datetimeValues,
-        'altitude': altitudes,
+        'altitude': targetAltitudes,
         'altitude_method_used': altitudeMethodUsed,
         'selected_levels': targetAltitudes,
     }
-    
+
     ds.close()
     return result
 
