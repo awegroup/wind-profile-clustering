@@ -6,6 +6,9 @@ __pycache__/
 # Ignore NetCDF files
 *.netcdf
 
+# Ignore .rtd files
+*.rtd
+
 # Ignore .yml results files
 results/*.yml
 results/wind_profiles_and_probabilities_era5.yml

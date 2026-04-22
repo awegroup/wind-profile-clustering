@@ -25,7 +25,7 @@ R_D = 287.058  # Specific gas constant for dry air [J/(kg·K)]
 # Altitude calculation method control
 # When True, always use Method 2 (approximate altitudes)
 # When False, automatically determine the best method based on available data
-FORCE_APPROXIMATE_ALTITUDES = True
+FORCE_APPROXIMATE_ALTITUDES = False
 
 # ERA5 L137 Model Level Definitions
 # Source: ECMWF https://confluence.ecmwf.int/display/UDOC/L137+model+level+definitions 
@@ -217,15 +217,14 @@ def method1_temperature_humidity_altitudes(dsSelected, levels, targetAltitudes, 
     sp = dsSfcSel['sp'].values if 'sp' in dsSfcSel else np.exp(dsSfcSel['lnsp'].values)
     dsSfc.close()
     
-    # Get surface geopotential
-    geopotentialFile = Path(sfcFilePath).parent / 'era5_geopotential.netcdf'
-    if not geopotentialFile.exists():
-        raise FileNotFoundError(f"Surface geopotential file required for Method 1: {geopotentialFile}")
-        
-    dsGeo = xr.open_dataset(geopotentialFile)
-    dsGeoSel = dsGeo.interp(latitude=location['latitude'], longitude=location['longitude'], method='linear')
-    zSfc = dsGeoSel['z'].values[0] if 'z' in dsGeoSel else dsGeoSel['geopotential'].values[0]
-    dsGeo.close()
+    # Get surface geopotential from the sfc file (z is included as a static field)
+    if 'z' in dsSfcSel:
+        zSfc = float(dsSfcSel['z'].values.flat[0])
+    elif 'geopotential' in dsSfcSel:
+        zSfc = float(dsSfcSel['geopotential'].values.flat[0])
+    else:
+        raise ValueError("Surface geopotential 'z' not found in surface data file. "
+                         "Expected variable 'z' or 'geopotential'.")
 
     # Calculate altitudes at each timestep using hydrostatic equation
     # This gives altitudes relative to the surface geopotential
