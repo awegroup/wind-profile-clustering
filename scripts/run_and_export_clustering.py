@@ -59,8 +59,8 @@ def main():
         print("Using ERA5 reanalysis data...")
         from wind_profile_clustering.read_data.era5 import read_data
         config = {
-            'data_dir': 'data/era5test',
-            'location': {'latitude': 53.70562085459165, 'longitude': -10.0965025995509410},  # Netherlands
+            'data_dir': 'data/era5',
+            'location': {'latitude': 52, 'longitude': 5},  # Netherlands
             'altitude_range': (10, 500),  # 10-500m above ground
             'years': (2018, 2018)  # Years to include
         }

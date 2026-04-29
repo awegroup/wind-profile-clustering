@@ -501,10 +501,6 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetA
     # Open dataset and select location
     ds = xr.open_dataset(filePath)
     
-    # Check data format and available variables
-    hasTemperature = 'temperature' in ds or 't' in ds
-    hasHumidity = 'specific_humidity' in ds or 'q' in ds
-    
     # Get model levels
     if 'model_level' in ds:
         levels = ds['model_level']
@@ -533,13 +529,28 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetA
     # hydrostatic altitude calculation, not before.
     gridIndices, weights = _bilinear_weights(lats, lons, latTarget, lonTarget)
 
-    # Open surface dataset once, shared across all 4 grid points
-    dsSfc = None
-    if hasTemperature and hasHumidity:
-        if sfcFilePath is None:
-            raise ValueError("Surface data file path required for Method 1 (temperature/humidity)")
+    # Check data format and available variables
+    hasTemperature = 'temperature' in ds or 't' in ds
+    hasHumidity = 'specific_humidity' in ds or 'q' in ds
+    
+    # Validate surface file variables before deciding which method to use
+    if sfcFilePath is not None:
         if not Path(sfcFilePath).exists():
-            raise FileNotFoundError(f"Surface data file required for Method 1: {sfcFilePath}")
+            raise FileNotFoundError(f"Surface data file not found: {sfcFilePath}")
+        with xr.open_dataset(sfcFilePath) as dsSfcCheck:
+            hasSp = 'sp' in dsSfcCheck or 'lnsp' in dsSfcCheck
+            hasZ = 'z' in dsSfcCheck or 'geopotential' in dsSfcCheck
+            if not hasSp or not hasZ:
+                missingVars = []
+                if not hasSp:
+                    missingVars.append("'sp' or 'lnsp'")
+                if not hasZ:
+                    missingVars.append("'z' or 'geopotential'")
+                print(f"Surface file missing required variables: {', '.join(missingVars)}, Cannot use Method 1 for altitude calculation.")
+
+    # Decide which altitude calculation method to use based on available variables
+    dsSfc = None
+    if hasTemperature and hasHumidity and hasSp and hasZ:
         dsSfc = xr.open_dataset(sfcFilePath)
         sfcLatCoord = 'latitude' if 'latitude' in dsSfc.coords else 'lat'
         sfcLonCoord = 'longitude' if 'longitude' in dsSfc.coords else 'lon'
