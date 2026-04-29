@@ -41,14 +41,15 @@ def main():
     # DATA SOURCE CONFIGURATION
     # =============================================================================
     # Choose which data source to use by setting DATA_SOURCE to one of:
-    # 'era5'      - Use ERA5 reanalysis data from NetCDF files
-    # 'fgw_lidar' - Use FGW lidar measurements from CSV file
-    # 'dowa'      - Use DOWA model data from NetCDF files
+    # 'era5'       - Use ERA5 reanalysis data from NetCDF files
+    # 'fgw_lidar'  - Use FGW lidar measurements from CSV file
+    # 'dowa'       - Use DOWA model data from NetCDF files
+    # 'wls7_lidar' - Use WindCube WLS7-130 lidar data from RTD files
     #
     # TIP: Run 'python check_data_sources.py' to see which sources are available
     # =============================================================================
-    
-    DATA_SOURCE = 'era5'  # Change this to select your data source
+
+    DATA_SOURCE = 'wls7_lidar'  # Change this to select your data source
     
     # =============================================================================
     # DATA SOURCE SPECIFIC CONFIGURATIONS
@@ -58,10 +59,10 @@ def main():
         print("Using ERA5 reanalysis data...")
         from wind_profile_clustering.read_data.era5 import read_data
         config = {
-            'data_dir': 'data/era5',
-            'location': {'latitude': 52.0, 'longitude': 4.0},  # Netherlands
+            'data_dir': 'data/era5test',
+            'location': {'latitude': 53.70562085459165, 'longitude': -10.0965025995509410},  # Netherlands
             'altitude_range': (10, 500),  # 10-500m above ground
-            'years': (2011, 2011)  # Years to include
+            'years': (2018, 2018)  # Years to include
         }
         data = read_data(config)
         outPrefix = 'era5'
@@ -139,9 +140,36 @@ def main():
             },            
         }
         
+    elif DATA_SOURCE == 'wls7_lidar':
+        print("Using WindCube WLS7-130 lidar data...")
+        from wind_profile_clustering.read_data.wls7_130_lidar import read_data
+        config = {
+            'data_dir': 'data/WLS7-130_lidar',
+            'date_range': None,      # e.g. ('2024-10-20', '2025-06-11')
+            'resample_hourly': True, # resample ~4-second data to hourly means
+        }
+        data = read_data(config)
+        outPrefix = 'wls7_lidar'
+
+        # Prepare metadata for WLS7-130 lidar
+        metadata = {
+            'name': 'WLS7-130 Lidar Wind Profile Clustering',
+            'description': 'Wind profile clustering results derived from WindCube WLS7-130 lidar measurements',
+            'note': 'WindCube WLS7-130 lidar measurement data (Bangor Erris, Ireland)',
+            'data_source': 'WLS7-130_Lidar',
+            'location': {
+                'latitude': 54.1254,
+                'longitude': -9.7801,
+            },
+            'time_range': {
+                'start_date': str(data['datetime'][0].astype('datetime64[D]')),
+                'end_date': str(data['datetime'][-1].astype('datetime64[D]')),
+            },
+        }
+
     else:
         raise ValueError(f"Unknown data source: {DATA_SOURCE}. "
-                        "Choose from 'era5', 'fgw_lidar', or 'dowa'.\n"
+                        "Choose from 'era5', 'fgw_lidar', 'dowa', or 'wsl7_lidar'.\n"
                         "Run 'python check_data_sources.py' to see available options.")
     
     print(f"Loaded {data['n_samples']} samples from {data['years'][0]} to {data['years'][1]}")

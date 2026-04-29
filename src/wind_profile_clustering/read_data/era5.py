@@ -555,7 +555,7 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetA
     for latIdx, lonIdx in gridIndices:
         dsPoint = ds.isel(**{latCoord: latIdx, lonCoord: lonIdx})
 
-        if hasTemperature and hasHumidity:
+        if altitudeMethodUsed == 1:
             # Select the matching grid point from the surface file by coordinate value
             dsSfcPoint = dsSfc.sel(
                 **{sfcLatCoord: float(lats[latIdx]), sfcLonCoord: float(lons[lonIdx])},
@@ -564,7 +564,7 @@ def read_era5_month(filePath, location, altitudeRange, sfcFilePath=None, targetA
             windEast, windNorth = method1_temperature_humidity_altitudes(
                 dsPoint, levels, targetAltitudes, dsSfcPoint
             )
-        else:
+        elif altitudeMethodUsed == 2:
             windEast, windNorth = method2_approximate_altitudes(
                 dsPoint, levels, targetAltitudes
             )

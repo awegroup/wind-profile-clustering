@@ -43,9 +43,10 @@ def main():
     # DATA SOURCE CONFIGURATION
     # =============================================================================
     # Choose which data source to use by setting DATA_SOURCE to one of:
-    # 'era5'      - Use ERA5 reanalysis data from NetCDF files
-    # 'fgw_lidar' - Use FGW lidar measurements from CSV file
-    # 'dowa'      - Use DOWA model data from NetCDF files
+    # 'era5'       - Use ERA5 reanalysis data from NetCDF files
+    # 'fgw_lidar'  - Use FGW lidar measurements from CSV file
+    # 'dowa'       - Use DOWA model data from NetCDF files
+    # 'wls7_lidar' - Use WindCube WLS7-130 lidar data from RTD files
     # =============================================================================
 
     DATA_SOURCE = 'era5'  # Change this to select your data source
@@ -61,7 +62,7 @@ def main():
             'data_dir': 'data/era5',
             'location': {'latitude': 52.0, 'longitude': 4.0},  # Netherlands
             'altitude_range': (10, 500),  # 10-500 m above ground
-            'years': (2011, 2011)
+            'years': (2024, 2025)
         }
         data = read_data(config)
         outPrefix = 'era5'
@@ -119,10 +120,31 @@ def main():
         dataSourceLabel = 'DOWA'
         altitudeRangeMeta = [float(data['altitude'].min()), float(data['altitude'].max())]
 
+    elif DATA_SOURCE == 'wls7_lidar':
+        print("Using WindCube WLS7-130 lidar data...")
+        from wind_profile_clustering.read_data.wls7_130_lidar import read_data
+        config = {
+            'data_dir': 'data/WLS7-130_lidar',
+            'date_range': None,      # e.g. ('2024-10-20', '2025-06-11')
+            'resample_hourly': True, # resample ~4-second data to hourly means
+        }
+        data = read_data(config)
+        outPrefix = 'wls7_lidar'
+
+        locationMeta = {'latitude': 54.1254, 'longitude': -9.7801}
+        timeRangeMeta = {
+            'start_year': data['years'][0],
+            'end_year': data['years'][1],
+            'years_included': [],
+            'months_included': 'varies',
+        }
+        dataSourceLabel = 'WLS7-130_Lidar'
+        altitudeRangeMeta = [float(data['altitude'].min()), float(data['altitude'].max())]
+
     else:
         raise ValueError(
             f"Unknown data source: {DATA_SOURCE}. "
-            "Choose from 'era5', 'fgw_lidar', or 'dowa'."
+            "Choose from 'era5', 'fgw_lidar', 'dowa', or 'wls7_lidar'."
         )
 
     print(f"Loaded {data['n_samples']} samples from {data['years'][0]} to {data['years'][1]}")
