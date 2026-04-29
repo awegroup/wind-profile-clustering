@@ -5,6 +5,7 @@ __pycache__/
 
 # Ignore NetCDF files
 *.netcdf
+*.rtd
 
 # Ignore .yml results files
 results/*.yml

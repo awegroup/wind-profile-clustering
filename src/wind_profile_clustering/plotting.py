@@ -15,6 +15,51 @@ xlim_pc12 = [-1.1, 1.1]
 ylim_pc12 = [-1.1, 1.1]
 x_lim_profiles = [-0.8, 1.25]
 
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+mpl.rcParams.update({
+    'font.family'         : 'serif',       # Computer Modern — the default LaTeX font
+    'font.size'           : 10,            # body text size (most journals use 10 pt)
+    'axes.labelsize'      : 10,            # axis-label size matches body text
+    'xtick.labelsize'     : 9,             # tick labels one point smaller
+    'ytick.labelsize'     : 9,
+    'legend.fontsize'     : 9,             # legend text one point smaller
+    'axes.prop_cycle'     : mpl.cycler('color', [   # Okabe–Ito colorblind-safe palette
+        '#0072B2', '#D55E00', '#009E73',
+        '#E69F00', '#CC79A7', '#56B4E9',
+    ]),
+    'lines.linewidth'     : 1.5,           # slightly thicker for print clarity
+    'axes.linewidth'      : 0.8,           # thinner axis frame
+    'xtick.direction'     : 'in',          # inward ticks — journal standard
+    'ytick.direction'     : 'in',
+    'xtick.minor.visible' : True,          # show minor ticks
+    'ytick.minor.visible' : True,
+    'xtick.major.size'    : 4,             # longer than the 3.5 default
+    'ytick.major.size'    : 4,
+    'xtick.minor.size'    : 2,             # half of major — proportional
+    'ytick.minor.size'    : 2,
+    'xtick.major.width'   : 0.8,           # match axes.linewidth
+    'ytick.major.width'   : 0.8,
+    'xtick.minor.width'   : 0.6,           # thinner for visual hierarchy
+    'ytick.minor.width'   : 0.6,
+    'lines.markersize'    : 4,             # smaller markers for print scale
+    'errorbar.capsize'    : 3,             # visible end-caps (default is 0)
+    'axes.xmargin'        : 0.02,          # hug the data (default is 0.05)
+    'axes.ymargin'        : 0.02,
+    'legend.frameon'      : False,         # no legend box
+    'savefig.bbox'        : 'tight',       # tight bounding box by default
+    'savefig.dpi'         : 300,           # publication-quality resolution
+    **(                                    # LaTeX if installed, else fallback
+        {'text.usetex'        : True,              # real LaTeX for all text
+         'text.latex.preamble': r'\usepackage{amsmath} \usepackage{amssymb}',
+         'pgf.texsystem'     : 'pdflatex',         # consistent PGF export
+         'pgf.rcfonts'       : False}               # let LaTeX control fonts
+        if __import__('shutil').which('latex') else
+        {'text.usetex'        : False,             # no TeX install found
+         'mathtext.fontset'  : 'cm'}               # Computer Modern via mathtext
+    ),
+})
 
 def plot_wind_profile_shapes(altitudes, wind_prl, wind_prp, wind_mag=None, n_rows=2, savePlots=False):
     """Plot wind profile shapes showing parallel and perpendicular components.

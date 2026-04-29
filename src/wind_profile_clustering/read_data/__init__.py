@@ -5,4 +5,5 @@ This package contains modules for reading different types of wind data:
 - era5: ERA5 reanalysis data
 - fgw_lidar: FGW lidar data
 - dowa: DOWA model data
+- wsl7_130_lidar: WindCube WLS7-130 lidar data (RTD files)
 """
