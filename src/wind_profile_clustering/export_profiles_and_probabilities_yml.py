@@ -1,7 +1,7 @@
 """Export wind profile shapes and probability distributions to YAML.
 
 - Metadata about the clustering process and data source.
-- A single list of altitude levels shared across all clusters.
+- A single list of altitude levels shared across all profiles.
 - Normalized wind profile components (u and v) for each cluster.
 - Probability distributions of wind speeds for each cluster.
 """
@@ -135,7 +135,7 @@ def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, 
         'location': metadata.get('location',{}),
         'time_range': metadata.get('time_range',{}),
         'altitude_range': metadata.get('altitude_range', []),
-        'n_clusters': nClusters,
+        'n_profiles': nClusters,
         'n_wind_speed_bins': nWindSpeedBins,
         'n_wind_direction_bins': nWindDirectionBins,
         'wind_direction_bin_width': windDirectionBinWidth,
@@ -157,7 +157,7 @@ def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, 
             'bin_edges': list(map(float, windDirectionBins)),
             'bin_centers': list(map(float, (windDirectionBins[:-1] + windDirectionBins[1:]) / 2))
         },
-        'clusters': [
+        'profiles': [
             {
                 'id': profile['id'],
                 'u_normalized': profile['u_normalized'],
@@ -165,8 +165,8 @@ def export_wind_profile_shapes_and_probabilities(heights, prl, prp, labelsFull, 
             } for profile in profiles
         ],
         'probability_matrix': {
-            'description': 'Probability of each cluster occurring at each wind speed and direction bin (% of total samples)',
-            'dimensions': '[n_clusters x n_wind_speed_bins x n_wind_direction_bins]',
+            'description': 'Probability of each profile occurring at each wind speed and direction bin (% of total samples)',
+            'dimensions': '[n_profiles x n_wind_speed_bins x n_wind_direction_bins]',
             'data': probabilityMatrix.tolist()
         }
     }
