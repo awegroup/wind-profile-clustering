@@ -104,3 +104,5 @@ python scripts/run_and_export_prescribed.py
 
 This builds a wind resource file entirely from prescribed parameters — no measured wind data is required. The profile shape is computed analytically and the wind speed probability distribution is a Weibull distribution. Results are exported to the awesIO wind resource YAML format in the `results/` directory.
 
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
